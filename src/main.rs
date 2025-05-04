@@ -30,8 +30,8 @@ fn spin_camera(mut cams: Query<(&mut Transform, &SpinningCam)>, time: Res<Time>)
                 (time.elapsed_secs() * spinning_cam_vars.speed).cos() * spinning_cam_vars.distance;
             let new_x =
                 (time.elapsed_secs() * spinning_cam_vars.speed).sin() * spinning_cam_vars.distance;
-            let add_y = (time.elapsed_secs() * spinning_cam_vars.speed / 0.35).sin();
-            let new_transform = Transform::from_xyz(new_x, spinning_cam_vars.height + add_y, new_z)
+            let sway_y = (time.elapsed_secs() * spinning_cam_vars.speed / 0.35).sin();
+            let new_transform = Transform::from_xyz(new_x, spinning_cam_vars.height + sway_y, new_z)
                 .looking_at(spinning_cam_vars.look_at, Vec3::Y);
             *transform = new_transform;
         });
