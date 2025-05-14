@@ -1,5 +1,8 @@
 use bevy::{
-    core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass},
+    core_pipeline::prepass::DepthPrepass,
+    pbr::{
+        ExtendedMaterial, MaterialExtension, NotShadowCaster,
+    },
     prelude::*,
     render::render_resource::AsBindGroup,
 };
@@ -8,7 +11,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            MaterialPlugin::<RaymarchMaterial>::default(),
+            MaterialPlugin::<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>::default(),
         ))
         .add_systems(Startup, (spawn_camera, spawn_shit))
         .add_systems(Update, spin_camera)
@@ -31,8 +34,9 @@ fn spin_camera(mut cams: Query<(&mut Transform, &SpinningCam)>, time: Res<Time>)
             let new_x =
                 (time.elapsed_secs() * spinning_cam_vars.speed).sin() * spinning_cam_vars.distance;
             let sway_y = (time.elapsed_secs() * spinning_cam_vars.speed / 0.35).sin();
-            let new_transform = Transform::from_xyz(new_x, spinning_cam_vars.height + sway_y, new_z)
-                .looking_at(spinning_cam_vars.look_at, Vec3::Y);
+            let new_transform =
+                Transform::from_xyz(new_x, spinning_cam_vars.height + sway_y, new_z)
+                    .looking_at(spinning_cam_vars.look_at, Vec3::Y);
             *transform = new_transform;
         });
 }
@@ -44,13 +48,15 @@ fn spawn_camera(mut commands: Commands) {
         },
         SpinningCam {
             height: 2.0,
-            distance: 2.0,
+            distance: 4.0,
             speed: 0.5,
             look_at: Vec3::new(0.0, 0.5, 0.0),
         },
+        Msaa::Off,
         DepthPrepass,
-        NormalPrepass,
-        MotionVectorPrepass,
+        // DeferredPrepass,
+        // NormalPrepass,
+        // MotionVectorPrepass,
     ));
 }
 
@@ -58,13 +64,28 @@ fn spawn_camera(mut commands: Commands) {
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 struct RaymarchMaterial {}
 
-impl Material for RaymarchMaterial {
+impl MaterialExtension for RaymarchMaterial {
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
         "shaders/basic_raymarch.wgsl".into()
     }
-
-    fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Blend
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::render::mesh::MeshVertexBufferLayoutRef,
+        _key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> std::result::Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = Some(bevy::render::render_resource::Face::Back);
+        descriptor.depth_stencil = Some(bevy::render::render_resource::DepthStencilState {
+            format: bevy::render::render_resource::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: bevy::render::render_resource::CompareFunction::Greater,
+            stencil: bevy::render::render_resource::StencilState::default(),
+            bias: bevy::render::render_resource::DepthBiasState::default(),
+        });
+        Ok(())
+    }
+    fn prepass_fragment_shader() -> bevy::render::render_resource::ShaderRef {
+        "shaders/basic_raymarch_prepass.wgsl".into()
     }
 }
 
@@ -72,7 +93,7 @@ fn spawn_shit(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut raymarch_material: ResMut<Assets<RaymarchMaterial>>,
+    mut raymarch_material: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
 ) {
     // circular base
     commands.spawn((
@@ -83,15 +104,33 @@ fn spawn_shit(
     // cube
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(2.0, 2.0, 2.0))),
-        MeshMaterial3d(raymarch_material.add(RaymarchMaterial {})),
+        MeshMaterial3d(raymarch_material.add(ExtendedMaterial {
+            base: StandardMaterial {
+                base_color: bevy::color::palettes::css::BLUE.into(),
+                alpha_mode: AlphaMode::Blend,
+                ..Default::default()
+            },
+            extension: RaymarchMaterial {},
+        })),
+        NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
+    ));
+    // cylinder
+    commands.spawn((
+        Mesh3d(meshes.add(Sphere::new(0.5))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::Srgba(Srgba::rgb_u8(200, 40, 40)),
+            ..Default::default()
+        })),
+        Transform::from_xyz(1.0, 0.5, 1.0),
     ));
     // light
     commands.spawn((
         PointLight {
             shadows_enabled: true,
+            intensity: 2000000.0,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
+        Transform::from_xyz(4.0, 4.0, 4.0),
     ));
 }

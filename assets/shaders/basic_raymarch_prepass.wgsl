@@ -1,17 +1,20 @@
 #import bevy_pbr::{
-mesh_view_bindings::globals,
-  // forward_io::VertexOutput,
+  mesh_view_bindings::globals,
   prepass_utils,
-  bevy_pbr::prepass_io,
   prepass_io::VertexOutput,
-  prepass_io::FragmentOutput,
+  forward_io::FragmentOutput,
 }
 
 @fragment
 fn fragment(
 	    @builtin(sample_index) sample_index: u32,
 	    in: VertexOutput,
-	    ) -> @location(0) vec3<f32> {
-  let color = vec4<f32>(0.0);
-  return color;
+	    ) -> @builtin(frag_depth) f32 {
+// #ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+  // in.unclipped_depth = 1000.0;
+// #endif // UNCLIPPED_DEPTH_ORTHO_EMULATION
+  // var out: FragmentOutput;
+  // out.color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+  // return out;
+  return 0.0;
 }
