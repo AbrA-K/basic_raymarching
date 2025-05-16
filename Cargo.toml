@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = {version = "0.16.0", features = ["wayland", "dynamic_linking"]}
+bevy_egui = "0.34.1"
 
 # optimizations for dependencies, but not our code
 [profile.dev.package."*"]

@@ -1,8 +1,9 @@
+mod ui;
+use ui::MyRaymarchUi;
+
 use bevy::{
     core_pipeline::prepass::DepthPrepass,
-    pbr::{
-        ExtendedMaterial, MaterialExtension, NotShadowCaster,
-    },
+    pbr::{ExtendedMaterial, MaterialExtension, NotShadowCaster},
     prelude::*,
     render::render_resource::AsBindGroup,
 };
@@ -11,6 +12,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
+            MyRaymarchUi,
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>::default(),
         ))
         .add_systems(Startup, (spawn_camera, spawn_shit))
@@ -23,6 +25,7 @@ struct SpinningCam {
     height: f32,
     distance: f32,
     speed: f32,
+    sway_amount: f32,
     look_at: Vec3,
 }
 
@@ -33,7 +36,8 @@ fn spin_camera(mut cams: Query<(&mut Transform, &SpinningCam)>, time: Res<Time>)
                 (time.elapsed_secs() * spinning_cam_vars.speed).cos() * spinning_cam_vars.distance;
             let new_x =
                 (time.elapsed_secs() * spinning_cam_vars.speed).sin() * spinning_cam_vars.distance;
-            let sway_y = (time.elapsed_secs() * spinning_cam_vars.speed / 0.35).sin();
+            let sway_y = (time.elapsed_secs() * spinning_cam_vars.speed / 0.35).sin()
+                * spinning_cam_vars.sway_amount;
             let new_transform =
                 Transform::from_xyz(new_x, spinning_cam_vars.height + sway_y, new_z)
                     .looking_at(spinning_cam_vars.look_at, Vec3::Y);
@@ -50,6 +54,7 @@ fn spawn_camera(mut commands: Commands) {
             height: 2.0,
             distance: 4.0,
             speed: 0.5,
+            sway_amount: 1.0,
             look_at: Vec3::new(0.0, 0.5, 0.0),
         },
         Msaa::Off,
