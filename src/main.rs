@@ -5,7 +5,7 @@ use bevy::{
     core_pipeline::prepass::DepthPrepass,
     pbr::{ExtendedMaterial, MaterialExtension, NotShadowCaster},
     prelude::*,
-    render::render_resource::AsBindGroup,
+    render::{render_resource::AsBindGroup, storage::ShaderStorageBuffer},
 };
 
 fn main() {
@@ -67,8 +67,10 @@ fn spawn_camera(mut commands: Commands) {
 
 // my RayMarch Material
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-struct RaymarchMaterial {}
-
+struct RaymarchMaterial {
+    #[uniform(100)]
+    roughness: f32,
+}
 impl MaterialExtension for RaymarchMaterial {
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
         "shaders/basic_raymarch.wgsl".into()
@@ -107,16 +109,18 @@ fn spawn_shit(
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
     // cube
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(2.0, 2.0, 2.0))),
-        MeshMaterial3d(raymarch_material.add(ExtendedMaterial {
+    let rm_material_handle = raymarch_material.add(ExtendedMaterial {
             base: StandardMaterial {
                 base_color: bevy::color::palettes::css::BLUE.into(),
                 alpha_mode: AlphaMode::Blend,
                 ..Default::default()
             },
-            extension: RaymarchMaterial {},
-        })),
+            extension: RaymarchMaterial { roughness: 1.0 },
+    });
+    commands.insert_resource(RaymarchMaterialHandle(rm_material_handle.clone()));
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(2.0, 2.0, 2.0))),
+        MeshMaterial3d(rm_material_handle.clone()),
         NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
@@ -139,3 +143,7 @@ fn spawn_shit(
         Transform::from_xyz(4.0, 4.0, 4.0),
     ));
 }
+
+/// this holds the current Material Handle (like a pointer) as a Resource
+#[derive(Resource)]
+struct RaymarchMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>);

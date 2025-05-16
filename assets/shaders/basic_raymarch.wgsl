@@ -9,6 +9,8 @@
     pbr_fragment::pbr_input_from_standard_material,
 }
 
+@group(2) @binding(100) var<uniform> passed_roughness: f32;
+
 const MARCH_MIN_DIST = 0.001;
 const FAR_CLIP = 10.0;
 const NEAR_CLIP = 0.5; // TODO: this is unused
@@ -42,6 +44,7 @@ fn fragment(
 	  var out: FragmentOutput;
 	  var pbr_input = pbr_input_from_standard_material(mesh, true);
 	  pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+	  pbr_input.material.perceptual_roughness = passed_roughness;
 	  pbr_input.world_normal = get_normal_of_surface(curr_pos);
 	  pbr_input.N = get_normal_of_surface(curr_pos); // this is also the normal??
 	  pbr_input.world_position = vec4<f32>(curr_pos, 1.0);
