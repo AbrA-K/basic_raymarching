@@ -1,11 +1,16 @@
 mod ui;
+use bevy_egui::egui::Color32;
 use ui::MyRaymarchUi;
 
 use bevy::{
     core_pipeline::prepass::DepthPrepass,
+    math::VectorSpace,
     pbr::{ExtendedMaterial, MaterialExtension, NotShadowCaster},
     prelude::*,
-    render::{render_resource::AsBindGroup, storage::ShaderStorageBuffer},
+    render::{
+        render_resource::{AsBindGroup, ShaderType},
+        storage::ShaderStorageBuffer,
+    },
 };
 
 fn main() {
@@ -65,11 +70,88 @@ fn spawn_camera(mut commands: Commands) {
     ));
 }
 
+// info to pass to the shader
+// VEEERY carefull with the order of these params
+// they HAVE to reflect the state of the same named struct in the shader
+#[derive(Debug, AsBindGroup, Clone, ShaderType)]
+#[repr(C)]
+struct RaymarchObjectDiscriptor {
+    // translation
+    world_position: Vec3,
+    rotation: Vec3,
+
+    // movement
+    move_amout: f32,
+    rotation_amount: f32,
+
+    // in rust land, we would use an enum here
+    // but since this struct is passed to wgpu, I'm not sure how this would be passed
+    // make it work first - I'm not shipping this to prod or something
+    // TODO: maybe.. don't do this lol
+    /// circle = 1
+    /// square = 2
+    /// cone = 3
+    shape_type_id: u32,
+    /// circle -> radius
+    /// square -> side lenght
+    /// cone -> height
+    shape_var1: f32,
+    /// cone -> radius
+    shape_var2: f32,
+
+    // material
+    // TODO: a bunch of those are unused. do you need them?
+    base_color: Vec4,
+    emissive: Vec4,
+    reflectance: Vec3,
+    perceptual_roughness: f32,
+    metallic: f32,
+    diffuse_transmission: f32,
+    specular_transmission: f32,
+    thickness: f32,
+    ior: f32,
+    attenuation_distance: f32,
+    attenuation_color: Vec4,
+    clearcoat: f32,
+    clearcoat_perceptual_roughness: f32,
+    anisotropy_strength: f32,
+    anisotropy_rotation: Vec2,
+}
+
+impl Default for RaymarchObjectDiscriptor {
+    fn default() -> Self {
+        return RaymarchObjectDiscriptor {
+	    world_position: Vec3::new(0.0, 0.5, 0.0),
+	    rotation: Vec3::ZERO,
+	    move_amout: 0.0,
+	    rotation_amount: 0.0,
+	    shape_type_id: 1,
+	    shape_var1: 0.4,
+	    shape_var2: 0.4,
+            base_color: Vec4::new(1.0, 0.0, 0.0, 1.0),
+            emissive: Vec4::ZERO,
+            reflectance: Vec3::splat(0.5),
+            perceptual_roughness: 0.5,
+            metallic: 0.0,
+            diffuse_transmission: 0.0,
+            specular_transmission: 0.0,
+            thickness: 0.0,
+            ior: 1.5,
+            attenuation_distance: 1.0,
+            attenuation_color: Vec4::splat(1.0),
+            clearcoat: 0.0,
+            clearcoat_perceptual_roughness: 0.0,
+            anisotropy_strength: 0.0,
+            anisotropy_rotation: Vec2::ZERO,
+        };
+    }
+}
+
 // my RayMarch Material
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 struct RaymarchMaterial {
     #[uniform(100)]
-    roughness: f32,
+    material1: RaymarchObjectDiscriptor,
 }
 impl MaterialExtension for RaymarchMaterial {
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
@@ -110,12 +192,14 @@ fn spawn_shit(
     ));
     // cube
     let rm_material_handle = raymarch_material.add(ExtendedMaterial {
-            base: StandardMaterial {
-                base_color: bevy::color::palettes::css::BLUE.into(),
-                alpha_mode: AlphaMode::Blend,
-                ..Default::default()
-            },
-            extension: RaymarchMaterial { roughness: 1.0 },
+        base: StandardMaterial {
+            base_color: bevy::color::palettes::css::BLUE.into(),
+            alpha_mode: AlphaMode::Blend,
+            ..Default::default()
+        },
+        extension: RaymarchMaterial {
+            material1: RaymarchObjectDiscriptor::default(),
+        },
     });
     commands.insert_resource(RaymarchMaterialHandle(rm_material_handle.clone()));
     commands.spawn((
@@ -124,11 +208,13 @@ fn spawn_shit(
         NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
-    // cylinder
+    // sphere
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(0.5))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::Srgba(Srgba::rgb_u8(200, 40, 40)),
+            perceptual_roughness: 0.0,
+            base_color: Color::Srgba(Srgba::rgb_u8(255, 0, 0)),
+	    emissive: LinearRgba { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 },
             ..Default::default()
         })),
         Transform::from_xyz(1.0, 0.5, 1.0),

@@ -1,5 +1,11 @@
+use core::f32;
+
 use bevy::{pbr::ExtendedMaterial, prelude::*};
-use bevy_egui::{self, egui, EguiContextPass, EguiContexts, EguiPlugin};
+use bevy_egui::{
+    self,
+    egui::{self, Color32},
+    EguiContextPass, EguiContexts, EguiPlugin,
+};
 
 use crate::{RaymarchMaterial, RaymarchMaterialHandle, SpinningCam};
 
@@ -9,7 +15,7 @@ impl Plugin for MyRaymarchUi {
         app.add_plugins(EguiPlugin {
             enable_multipass_for_primary_context: true,
         });
-        app.add_systems(EguiContextPass, (camera_settings_ui, raymarch_settings_ui));
+        app.add_systems(EguiContextPass, (camera_settings_ui, object1_settings_ui));
     }
 }
 
@@ -36,18 +42,158 @@ fn camera_settings_ui(mut contexts: EguiContexts, mut cameras: Query<&mut Spinni
     });
 }
 
-fn raymarch_settings_ui(
+fn object1_settings_ui(
     mut contexts: EguiContexts,
     mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
     rm_material_handle: Res<RaymarchMaterialHandle>,
 ) {
     let rm_material = rm_materials.get_mut(&rm_material_handle.0);
     if let Some(mat) = rm_material {
-	egui::Window::new("Raymarch Settings").show(contexts.ctx_mut(), |ui| {
+        egui::Window::new("Object 1 Settings").show(contexts.ctx_mut(), |ui| {
             ui.horizontal(|ui| {
-		ui.label("roughness");
-		ui.add(egui::Slider::new(&mut mat.extension.roughness, 0.0..=1.0))
-            })
-	});
+                ui.label("Shape");
+                ui.radio_value(
+                    &mut mat.extension.material1.shape_type_id,
+                    Shape::Circle as u32,
+                    "Sphere",
+                );
+                ui.radio_value(
+                    &mut mat.extension.material1.shape_type_id,
+                    Shape::Cube as u32,
+                    "Cube",
+                );
+                ui.radio_value(
+                    &mut mat.extension.material1.shape_type_id,
+                    Shape::Cone as u32,
+                    "Cone",
+                );
+            });
+            ui.heading("Transform");
+            ui.horizontal(|ui| {
+                ui.label("x position");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.world_position.x,
+                    -1.0..=1.0,
+                ))
+            });
+            ui.horizontal(|ui| {
+                ui.label("y position");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.world_position.y,
+                    -1.0..=1.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("z position");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.world_position.z,
+                    -1.0..=1.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("rotation x");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.rotation.x,
+                    -f32::consts::PI..=f32::consts::PI,
+                ))
+            });
+            ui.horizontal(|ui| {
+                ui.label("rotation over time");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.rotation_amount,
+                    0.0..=1.0,
+                ))
+            });
+            ui.horizontal(|ui| {
+                ui.label("translation over time");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.move_amout,
+                    0.0..=1.0,
+                ))
+            });
+
+            ui.heading("Material");
+            ui.horizontal(|ui| {
+                ui.label("roughness");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.perceptual_roughness,
+                    0.0..=1.0,
+                ))
+            });
+            ui.horizontal(|ui| {
+                ui.label("base color");
+                let mut color32 = vec4_to_color32(&mat.extension.material1.base_color);
+                ui.color_edit_button_srgba(&mut color32);
+                mat.extension.material1.base_color = color32_to_vec4(color32);
+            });
+            ui.horizontal(|ui| {
+                ui.label("reflectance");
+                let mut color = mat
+                    .extension
+                    .material1
+                    .reflectance
+                    .to_array()
+                    .map(|e| (e * 255.0) as u8);
+                ui.color_edit_button_srgb(&mut color);
+                mat.extension.material1.reflectance = Vec3::new(
+                    color[0] as f32 / 255.0,
+                    color[1] as f32 / 255.0,
+                    color[2] as f32 / 255.0,
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("emissive");
+                let mut color32 = vec4_to_color32(&mat.extension.material1.emissive);
+                ui.color_edit_button_srgba(&mut color32);
+                mat.extension.material1.emissive = color32_to_vec4(color32);
+            });
+            ui.horizontal(|ui| {
+                ui.label("metallic");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.metallic,
+                    0.0..=1.0,
+                ))
+            });
+            ui.horizontal(|ui| {
+                ui.label("clearcoat");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.clearcoat,
+                    0.0..=1.0,
+                ))
+            });
+            ui.horizontal(|ui| {
+                ui.label("clearcoat roughness");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.material1.clearcoat_perceptual_roughness,
+                    0.0..=1.0,
+                ))
+            });
+            ui.add(egui::Label::new(
+                "hätte noch mehr Möglichkeiten, aber will nicht overcrouden",
+            ))
+        });
     }
+}
+
+fn vec4_to_color32(vec: &Vec4) -> Color32 {
+    let r = (vec.x * 255.0) as u8;
+    let g = (vec.y * 255.0) as u8;
+    let b = (vec.z * 255.0) as u8;
+    let a = (vec.w * 255.0) as u8;
+    return Color32::from_rgba_premultiplied(r, g, b, a);
+}
+
+fn color32_to_vec4(color: Color32) -> Vec4 {
+    let r = color.r() as f32 / 255.0;
+    let g = color.g() as f32 / 255.0;
+    let b = color.b() as f32 / 255.0;
+    let a = color.a() as f32 / 255.0;
+    return Vec4::new(r, g, b, a);
+}
+
+#[derive(PartialEq)]
+enum Shape {
+    Circle = 1,
+    Cube = 2,
+    Cone = 3,
 }
