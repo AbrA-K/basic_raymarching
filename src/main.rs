@@ -75,7 +75,7 @@ fn spawn_camera(mut commands: Commands) {
 // they HAVE to reflect the state of the same named struct in the shader
 #[derive(Debug, AsBindGroup, Clone, ShaderType)]
 #[repr(C)]
-struct RaymarchObjectDiscriptor {
+struct RaymarchObjectDescriptor {
     // translation
     world_position: Vec3,
     rotation: Vec3,
@@ -118,16 +118,16 @@ struct RaymarchObjectDiscriptor {
     anisotropy_rotation: Vec2,
 }
 
-impl Default for RaymarchObjectDiscriptor {
+impl Default for RaymarchObjectDescriptor {
     fn default() -> Self {
-        return RaymarchObjectDiscriptor {
-	    world_position: Vec3::new(0.0, 0.5, 0.0),
-	    rotation: Vec3::ZERO,
-	    move_amout: 0.0,
-	    rotation_amount: 0.0,
-	    shape_type_id: 1,
-	    shape_var1: 0.4,
-	    shape_var2: 0.4,
+        return RaymarchObjectDescriptor {
+            world_position: Vec3::new(0.0, 0.5, 0.0),
+            rotation: Vec3::ZERO,
+            move_amout: 0.0,
+            rotation_amount: 0.0,
+            shape_type_id: 1,
+            shape_var1: 0.4,
+            shape_var2: 0.4,
             base_color: Vec4::new(1.0, 0.0, 0.0, 1.0),
             emissive: Vec4::ZERO,
             reflectance: Vec3::splat(0.5),
@@ -147,11 +147,41 @@ impl Default for RaymarchObjectDiscriptor {
     }
 }
 
+#[derive(Debug, AsBindGroup, Clone, ShaderType)]
+#[repr(C)]
+struct RaymarchGlobalSettings {
+    /// 0 -> a OR b intersection
+    /// 1 -> a AND b intersection
+    /// 2 -> a NOT b intersection
+    intersection_method: u32,
+    intersection_smooth_amount: f32,
+    glow_range: f32,
+    glow_color: Vec4,
+    far_clip: f32,
+    termination_distance: f32
+}
+impl Default for RaymarchGlobalSettings {
+    fn default() -> Self {
+        return RaymarchGlobalSettings {
+            intersection_method: 0,
+            intersection_smooth_amount: 0.0,
+	    glow_range: 0.0,
+	    glow_color: Vec4::ZERO,
+	    far_clip: 10.0,
+	    termination_distance: 0.001,
+        };
+    }
+}
+
 // my RayMarch Material
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 struct RaymarchMaterial {
     #[uniform(100)]
-    material1: RaymarchObjectDiscriptor,
+    material1: RaymarchObjectDescriptor,
+    #[uniform(101)]
+    material2: RaymarchObjectDescriptor,
+    #[uniform(102)]
+    raymarch_global_settings: RaymarchGlobalSettings,
 }
 impl MaterialExtension for RaymarchMaterial {
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
@@ -198,7 +228,9 @@ fn spawn_shit(
             ..Default::default()
         },
         extension: RaymarchMaterial {
-            material1: RaymarchObjectDiscriptor::default(),
+            material1: RaymarchObjectDescriptor::default(),
+            material2: RaymarchObjectDescriptor::default(),
+	    raymarch_global_settings: RaymarchGlobalSettings::default(),
         },
     });
     commands.insert_resource(RaymarchMaterialHandle(rm_material_handle.clone()));
@@ -214,7 +246,12 @@ fn spawn_shit(
         MeshMaterial3d(materials.add(StandardMaterial {
             perceptual_roughness: 0.0,
             base_color: Color::Srgba(Srgba::rgb_u8(255, 0, 0)),
-	    emissive: LinearRgba { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 },
+            emissive: LinearRgba {
+                red: 1.0,
+                green: 1.0,
+                blue: 1.0,
+                alpha: 1.0,
+            },
             ..Default::default()
         })),
         Transform::from_xyz(1.0, 0.5, 1.0),

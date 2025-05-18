@@ -13,9 +13,10 @@
 }
 
 @group(2) @binding(100) var<uniform> object1: RaymarchObjectDescriptor;
+@group(2) @binding(101) var<uniform> object2: RaymarchObjectDescriptor;
+@group(2) @binding(102) var<uniform> raymarch_global_settings: RaymarchGlobalSettings;
 
-const MARCH_MIN_DIST = 0.001;
-const FAR_CLIP = 10.0;
+
 const NEAR_CLIP = 0.5; // TODO: this is unused
 
 @fragment
@@ -36,37 +37,28 @@ fn fragment(
   // start the marching
   var curr_pos = cam_pos;
   var dist_marched = 0.0;
-  let radius = 0.5;
   var min_step_length = 1000.0; // TODO: change to +inf
-  while dist_marched < FAR_CLIP {
+  while dist_marched < raymarch_global_settings.far_clip {
       let sdf_out = sdf_world(curr_pos);
-      if sdf_out.distance_to_surface < MARCH_MIN_DIST {
+      if sdf_out.distance_to_object1 < raymarch_global_settings.termination_distance
+		  || sdf_out.distance_to_object2 < raymarch_global_settings.termination_distance {
 	  // HIT!
 
 	  // color & material
 	  var out: FragmentOutput;
+	  var normal = vec3<f32>(0.3);
+	  var material: StandardMaterial;
+	  if sdf_out.distance_to_object1 < sdf_out.distance_to_object2 {
+	      normal = get_normal_of_surface(curr_pos).normal_obj_1;
+	      material = obj_descriptor_to_material(object1);
+	    } else {
+	      normal = get_normal_of_surface(curr_pos).normal_obj_2;
+	      material = obj_descriptor_to_material(object2);
+	  }
 	  var pbr_input = pbr_input_from_standard_material(mesh, true);
-	  pbr_input.material.base_color = object1.base_color;
-	  pbr_input.material.perceptual_roughness = object1.perceptual_roughness;
-
-	  pbr_input.material.emissive = object1.emissive;
-	  pbr_input.material.reflectance = object1.reflectance;
-	  pbr_input.material.metallic = object1.metallic;
-	  pbr_input.material.diffuse_transmission = object1.diffuse_transmission;
-	  pbr_input.material.specular_transmission = object1.specular_transmission;
-	  pbr_input.material.thickness = object1.thickness;
-	  pbr_input.material.ior = object1.ior;
-	  pbr_input.material.attenuation_distance = object1.attenuation_distance;
-	  pbr_input.material.attenuation_color = object1.attenuation_color;
-	  pbr_input.material.clearcoat = object1.clearcoat;
-	  pbr_input.material.clearcoat_perceptual_roughness = object1.clearcoat_perceptual_roughness;
-	  pbr_input.material.anisotropy_strength = object1.anisotropy_strength;
-	  pbr_input.material.anisotropy_rotation = object1.anisotropy_rotation;
-
-
-
-	  pbr_input.world_normal = get_normal_of_surface(curr_pos);
-	  pbr_input.N = get_normal_of_surface(curr_pos); // this is also the normal??
+	  pbr_input.material = material;
+	  pbr_input.world_normal = normal;
+	  pbr_input.N = normal; // this is also the normal??
 	  pbr_input.world_position = vec4<f32>(curr_pos, 1.0);
 	  out.color = apply_pbr_lighting(pbr_input);
 
@@ -83,7 +75,12 @@ fn fragment(
 	  return out;
 	}
 
-      let step = ray_dir * sdf_out.distance_to_surface;
+      var step: vec3<f32>;
+      if sdf_out.distance_to_object1 < sdf_out.distance_to_object2 {
+	  step = ray_dir * sdf_out.distance_to_object1;
+	} else {
+	  step = ray_dir * sdf_out.distance_to_object2;
+      }
       let step_length = length(step);
       if step_length < min_step_length {
 	  min_step_length = step_length;
@@ -99,46 +96,51 @@ fn fragment(
 }
 
 struct SdfOutput {
- distance_to_surface: f32,
- id: u32,
+ distance_to_object1: f32,
+ distance_to_object2: f32,
 }
 
 fn sdf_world(ray_position: vec3<f32>) -> SdfOutput {
-  let radius = 0.5;
-  var distance_to_surface = 100.0; // TODO: make +inf
-  var rp1 = ray_position;
+  let rp1 = translate_ray(ray_position, object1);
+  let rp2 = translate_ray(ray_position, object2);
 
+  let distance_to_object1 = sdf_object(rp1, object1);
+  let distance_to_object2 = sdf_object(rp2, object2);
+  return SdfOutput(distance_to_object1, distance_to_object2);
+}
+
+// TODO: implement y and z euler angles
+fn translate_ray(r: vec3<f32>, obj: RaymarchObjectDescriptor) -> vec3<f32> {
+  var out = r;
   // translation
   var added_translation = vec3<f32>(0.0);
-  added_translation.x = sin(globals.time * 0.5) * object1.move_amount;
-  added_translation.y = cos(globals.time) * object1.move_amount;
-  added_translation.z = cos(globals.time) * object1.move_amount * 0.2;
-  rp1 -= object1.world_position - added_translation;
+  added_translation.x = sin(globals.time * 0.5) * obj.move_amount;
+  added_translation.y = cos(globals.time) * obj.move_amount;
+  added_translation.z = cos(globals.time) * obj.move_amount * 0.2;
+  out -= obj.world_position - added_translation;
 
   // rotation
-  let added_rotation = object1.rotation_amount * globals.time;
-  rp1 = (vec4<f32>(rp1, 1.0) * rotation_mat_x(object1.rotation.x + added_rotation)).xyz;
+  let added_rotation = obj.rotation_amount * globals.time;
+  out = (vec4<f32>(out, 1.0) * rotation_mat_x(obj.rotation.x + added_rotation)).xyz;
+  return out;
+}
 
-  // for some reason, the cone default position is really low
-  // fix it here
-  if object1.shape_type_id == 3 {
+fn sdf_object(ray_position: vec3<f32>, obj: RaymarchObjectDescriptor) -> f32 {
+  if obj.shape_type_id == 1 {
+      return sdf_circle(ray_position, obj.shape_var1);
+    } else if obj.shape_type_id == 2 {
+      return sdBox(ray_position, vec3<f32>(obj.shape_var1));
+    } else if obj.shape_type_id == 3 {
+      // for some reason, the cone default position is really low
+      // fix it here
       var rp_higher = ray_position;
       rp_higher.y -= 0.25;
+      return sdConeBound(rp_higher,
+			 obj.shape_var1,
+			 vec2<f32>(sin(obj.shape_var2),
+				   cos(obj.shape_var2)));
     }
-
-  if object1.shape_type_id == 1 {
-      distance_to_surface = sdf_circle(rp1,
-				       object1.shape_var1);
-    } else if object1.shape_type_id == 2 {
-      distance_to_surface = sdBox(rp1,
-				  vec3<f32>(object1.shape_var1));
-    } else if object1.shape_type_id == 3 {
-      distance_to_surface = sdConeBound(rp1,
-					object1.shape_var1,
-					vec2<f32>(sin(object1.shape_var2),
-						  cos(object1.shape_var2)));
-    }
-  return SdfOutput(distance_to_surface, 0);
+  return 100000.0;
 }
 
 // ------------ SDF_FUNCTIONS ------------
@@ -156,39 +158,70 @@ fn sdConeBound(p: vec3f, h: f32, sincos: vec2f) -> f32 {
   return max(dot(sincos.yx, vec2f(length(p.xz), p.y)), -h - p.y);
 }
 
+fn opSmoothUnion(d1: f32, d2: f32, k: f32) -> f32 {
+  let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0., 1.);
+  return mix(d2, d1, h) - k * h * (1. - h);
+}
 
 // stolen from https://github.com/rust-adventure/bevy-examples/blob/fabbb45b5c6adbfc8d317c95fcd9097b08666c7c/examples/raymarch-sphere/assets/shaders/sdf.wgsl#L160
-fn get_normal_of_surface(position_of_hit: vec3<f32>) -> vec3<f32> {
+fn get_normal_of_surface(position_of_hit: vec3<f32>) -> SdfNormalOutput {
 
   let tiny_change_x = vec3(0.001, 0.0, 0.0);
   let tiny_change_y = vec3(0.0 , 0.001 , 0.0);
   let tiny_change_z = vec3(0.0 , 0.0 , 0.001);
 
-  let up_tiny_change_in_x: f32 = sdf_world(position_of_hit + tiny_change_x).distance_to_surface;
-  let down_tiny_change_in_x: f32 = sdf_world(position_of_hit - tiny_change_x).distance_to_surface;
-
-  let tiny_change_in_x: f32 = up_tiny_change_in_x - down_tiny_change_in_x;
-
-
-  let up_tiny_change_in_y: f32 = sdf_world(position_of_hit + tiny_change_y).distance_to_surface;
-  let down_tiny_change_in_y: f32 = sdf_world(position_of_hit - tiny_change_y).distance_to_surface;
-
-  let tiny_change_in_y: f32 = up_tiny_change_in_y - down_tiny_change_in_y;
+  let up_tiny_change_in_x1: f32 = sdf_world(position_of_hit + tiny_change_x).distance_to_object1;
+  let down_tiny_change_in_x1: f32 = sdf_world(position_of_hit - tiny_change_x).distance_to_object1;
+  let tiny_change_in_x1: f32 = up_tiny_change_in_x1 - down_tiny_change_in_x1;
 
 
-  let up_tiny_change_in_z: f32 = sdf_world(position_of_hit + tiny_change_z).distance_to_surface;
-  let down_tiny_change_in_z: f32 = sdf_world(position_of_hit - tiny_change_z).distance_to_surface;
+  let up_tiny_change_in_y1: f32 = sdf_world(position_of_hit + tiny_change_y).distance_to_object1;
+  let down_tiny_change_in_y1: f32 = sdf_world(position_of_hit - tiny_change_y).distance_to_object1;
+  let tiny_change_in_y1: f32 = up_tiny_change_in_y1 - down_tiny_change_in_y1;
 
-  let tiny_change_in_z: f32 = up_tiny_change_in_z - down_tiny_change_in_z;
+
+  let up_tiny_change_in_z1: f32 = sdf_world(position_of_hit + tiny_change_z).distance_to_object1;
+  let down_tiny_change_in_z1: f32 = sdf_world(position_of_hit - tiny_change_z).distance_to_object1;
+  let tiny_change_in_z1: f32 = up_tiny_change_in_z1 - down_tiny_change_in_z1;
 
 
-  let normal = vec3(
-		    tiny_change_in_x,
-		    tiny_change_in_y,
-		    tiny_change_in_z
+  let normal_dir1 = vec3(
+		    tiny_change_in_x1,
+		    tiny_change_in_y1,
+		    tiny_change_in_z1,
 		    );
 
-  return normalize(normal);
+  let normal1 = normalize(normal_dir1);
+
+  // DRY people are shaking rn
+  let up_tiny_change_in_x2: f32 = sdf_world(position_of_hit + tiny_change_x).distance_to_object2;
+  let down_tiny_change_in_x2: f32 = sdf_world(position_of_hit - tiny_change_x).distance_to_object2;
+  let tiny_change_in_x2: f32 = up_tiny_change_in_x2 - down_tiny_change_in_x2;
+
+
+  let up_tiny_change_in_y2: f32 = sdf_world(position_of_hit + tiny_change_y).distance_to_object2;
+  let down_tiny_change_in_y2: f32 = sdf_world(position_of_hit - tiny_change_y).distance_to_object2;
+  let tiny_change_in_y2: f32 = up_tiny_change_in_y2 - down_tiny_change_in_y2;
+
+
+  let up_tiny_change_in_z2: f32 = sdf_world(position_of_hit + tiny_change_z).distance_to_object2;
+  let down_tiny_change_in_z2: f32 = sdf_world(position_of_hit - tiny_change_z).distance_to_object2;
+  let tiny_change_in_z2: f32 = up_tiny_change_in_z2 - down_tiny_change_in_z2;
+
+
+  let normal_dir2 = vec3(
+		    tiny_change_in_x2,
+		    tiny_change_in_y2,
+		    tiny_change_in_z2,
+		    );
+
+  let normal2 = normalize(normal_dir2);
+
+  return SdfNormalOutput(normal1, normal2);
+}
+struct SdfNormalOutput {
+ normal_obj_1: vec3<f32>,
+ normal_obj_2: vec3<f32>,
 }
 
 
@@ -217,33 +250,69 @@ struct RaymarchObjectDescriptor {
  anisotropy_strength: f32,
  anisotropy_rotation: vec2<f32>,
 }
-// this does not exist in the base spec
-// lol, lmao even
-// https://github.com/gpuweb/gpuweb/issues/3987
-fn modulo_euclidean (a: f32, b: f32) -> f32 {
-	var m = a % b;
-	if (m < 0.0) {
-		if (b < 0.0) {
-			m -= b;
-		} else {
-			m += b;
-		}
-	}
-	return m;
+
+struct RaymarchGlobalSettings {
+ intersection_method: u32,
+ intersection_smooth_amount: f32,
+ glow_range: f32,
+ glow_color: vec4<f32>,
+ far_clip: f32,
+ termination_distance: f32
 }
+
 
 /// used for getting the material transition between 2 objects
 /// lerp_val is 0.0-1.0, where 0 is just at desc1, and 1 is just at desc2.
-// fn lerp_descriptors(desc1: RaymarchObjectDescriptor,
-// 		    desc2: RaymarchObjectDescriptor,
-// 		    lerp_val: f32) -> RaymarchObjectDescriptor {
+fn lerp_descriptors(desc1: RaymarchObjectDescriptor,
+		    desc2: RaymarchObjectDescriptor,
+		    lerp_val: f32) -> RaymarchObjectDescriptor {
+  let desc1_amount = 1.0 - lerp_val;
+  let desc2_amount = lerp_val;
+  var out = desc1;
 
-// }
+  out.base_color = desc1.base_color * desc1_amount + desc2.base_color * desc2_amount;
+  out.emissive = desc1.emissive * desc1_amount + desc2.emissive * desc2_amount;
+  out.reflectance = desc1.reflectance * desc1_amount + desc2.reflectance * desc2_amount;
+  out.perceptual_roughness = desc1.perceptual_roughness * desc1_amount + desc2.perceptual_roughness * desc2_amount;
+  out.metallic = desc1.metallic * desc1_amount + desc2.metallic * desc2_amount;
+  out.diffuse_transmission = desc1.diffuse_transmission * desc1_amount + desc2.diffuse_transmission * desc2_amount;
+  out.specular_transmission =
+    desc1.specular_transmission * desc1_amount + desc2.specular_transmission * desc2_amount;
+  out.thickness = desc1.thickness * desc1_amount + desc2.thickness * desc2_amount;
+  out.ior = desc1.ior * desc1_amount + desc2.ior * desc2_amount;
+  out.attenuation_distance = desc1.attenuation_distance * desc1_amount + desc2.attenuation_distance * desc2_amount;
+  out.attenuation_color = desc1.attenuation_color * desc1_amount + desc2.attenuation_color * desc2_amount;
+  out.clearcoat = desc1.clearcoat * desc1_amount + desc2.clearcoat * desc2_amount;
+  out.clearcoat_perceptual_roughness =
+    desc1.clearcoat_perceptual_roughness * desc1_amount + desc2.clearcoat_perceptual_roughness * desc2_amount;
+  out.anisotropy_strength = desc1.anisotropy_strength * desc1_amount + desc2.anisotropy_strength * desc2_amount;
+  out.anisotropy_rotation = desc1.anisotropy_rotation * desc1_amount + desc2.anisotropy_rotation * desc2_amount;
 
-// fn obj_descriptor_to_material(desc: RaymarchObjectDescriptor) -> StandardMaterial {
-//   var mat = standard_material_new();
-//   return mat;
-// }
+  return out;
+}
+
+
+fn obj_descriptor_to_material(desc: RaymarchObjectDescriptor) -> StandardMaterial {
+  var mat = standard_material_new();
+
+  mat.base_color = desc.base_color;
+  mat.perceptual_roughness = desc.perceptual_roughness;
+  mat.emissive = desc.emissive;
+  mat.reflectance = desc.reflectance;
+  mat.metallic = desc.metallic;
+  mat.diffuse_transmission = desc.diffuse_transmission;
+  mat.specular_transmission = desc.specular_transmission;
+  mat.thickness = desc.thickness;
+  mat.ior = desc.ior;
+  mat.attenuation_distance = desc.attenuation_distance;
+  mat.attenuation_color = desc.attenuation_color;
+  mat.clearcoat = desc.clearcoat;
+  mat.clearcoat_perceptual_roughness = desc.clearcoat_perceptual_roughness;
+  mat.anisotropy_strength = desc.anisotropy_strength;
+  mat.anisotropy_rotation = desc.anisotropy_rotation;
+
+  return mat;
+}
 
 fn rotation_mat_x(angle_x: f32) -> mat4x4<f32> {
   return mat4x4<f32>(
