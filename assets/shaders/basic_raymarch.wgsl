@@ -40,25 +40,23 @@ fn fragment(
   var min_step_length = 1000.0; // TODO: change to +inf
   while dist_marched < raymarch_global_settings.far_clip {
       let sdf_out = sdf_world(curr_pos);
-      if sdf_out.distance_to_object1 < raymarch_global_settings.termination_distance
-		  || sdf_out.distance_to_object2 < raymarch_global_settings.termination_distance {
+      if opSmoothUnion(sdf_out.distance_to_object1, sdf_out.distance_to_object2, raymarch_global_settings.intersection_smooth_amount) < raymarch_global_settings.termination_distance {
 	  // HIT!
 
 	  // color & material
 	  var out: FragmentOutput;
-	  var normal = vec3<f32>(0.3);
+	  var normal = get_normal_of_surface(curr_pos);
 	  var material: StandardMaterial;
-	  if sdf_out.distance_to_object1 < sdf_out.distance_to_object2 {
-	      normal = get_normal_of_surface(curr_pos).normal_obj_1;
-	      material = obj_descriptor_to_material(object1);
-	    } else {
-	      normal = get_normal_of_surface(curr_pos).normal_obj_2;
-	      material = obj_descriptor_to_material(object2);
-	  }
+	  var distances = vec2<f32>(sdf_out.distance_to_object1, sdf_out.distance_to_object2);
+	  distances = normalize(distances);
+	  let material_lerp_amount = ((distances.x - distances.y) + 1.0) * 0.5;
+	  let desc = lerp_descriptors(object1, object2, material_lerp_amount);
+	  material = obj_descriptor_to_material(desc);
 	  var pbr_input = pbr_input_from_standard_material(mesh, true);
 	  pbr_input.material = material;
 	  pbr_input.world_normal = normal;
 	  pbr_input.N = normal; // this is also the normal??
+	  pbr_input.V = normal; // this is also the normal??
 	  pbr_input.world_position = vec4<f32>(curr_pos, 1.0);
 	  out.color = apply_pbr_lighting(pbr_input);
 
@@ -76,11 +74,10 @@ fn fragment(
 	}
 
       var step: vec3<f32>;
-      if sdf_out.distance_to_object1 < sdf_out.distance_to_object2 {
-	  step = ray_dir * sdf_out.distance_to_object1;
-	} else {
-	  step = ray_dir * sdf_out.distance_to_object2;
-      }
+      let smin_distance = opSmoothUnion(sdf_out.distance_to_object1,
+					sdf_out.distance_to_object2,
+					raymarch_global_settings.intersection_smooth_amount);
+      step = ray_dir * smin_distance;
       let step_length = length(step);
       if step_length < min_step_length {
 	  min_step_length = step_length;
@@ -161,69 +158,53 @@ fn sdConeBound(p: vec3f, h: f32, sincos: vec2f) -> f32 {
 fn opSmoothUnion(d1: f32, d2: f32, k: f32) -> f32 {
   let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0., 1.);
   return mix(d2, d1, h) - k * h * (1. - h);
+
+}
+
+
+fn smin_circular(a: f32, b: f32, k: f32) -> f32 {
+  let km = k * (1.0/(1.0-sqrt(0.5)));
+  let h = max(k - abs(a-b), 0.0) / k;
+  return min(a,b) - k * 0.5 * (1.0 + h - sqrt(1.0 - h * (h - 2.0)));
 }
 
 // stolen from https://github.com/rust-adventure/bevy-examples/blob/fabbb45b5c6adbfc8d317c95fcd9097b08666c7c/examples/raymarch-sphere/assets/shaders/sdf.wgsl#L160
-fn get_normal_of_surface(position_of_hit: vec3<f32>) -> SdfNormalOutput {
-
+fn get_normal_of_surface(position_of_hit: vec3<f32>) -> vec3<f32> {
   let tiny_change_x = vec3(0.001, 0.0, 0.0);
   let tiny_change_y = vec3(0.0 , 0.001 , 0.0);
   let tiny_change_z = vec3(0.0 , 0.0 , 0.001);
 
-  let up_tiny_change_in_x1: f32 = sdf_world(position_of_hit + tiny_change_x).distance_to_object1;
-  let down_tiny_change_in_x1: f32 = sdf_world(position_of_hit - tiny_change_x).distance_to_object1;
-  let tiny_change_in_x1: f32 = up_tiny_change_in_x1 - down_tiny_change_in_x1;
+  let up_tiny_change_in_x: f32 = opSmoothUnion(sdf_world(position_of_hit + tiny_change_x).distance_to_object1,
+					       sdf_world(position_of_hit + tiny_change_x).distance_to_object2,
+					       raymarch_global_settings.intersection_smooth_amount);
+  let down_tiny_change_in_x: f32 = opSmoothUnion(sdf_world(position_of_hit - tiny_change_x).distance_to_object1,
+						 sdf_world(position_of_hit - tiny_change_x).distance_to_object2,
+						 raymarch_global_settings.intersection_smooth_amount);
+  let tiny_change_in_x: f32 = up_tiny_change_in_x - down_tiny_change_in_x;
+
+  let up_tiny_change_in_y: f32 = opSmoothUnion(sdf_world(position_of_hit + tiny_change_y).distance_to_object1,
+					       sdf_world(position_of_hit + tiny_change_y).distance_to_object2,
+					       raymarch_global_settings.intersection_smooth_amount);
+  let down_tiny_change_in_y: f32 = opSmoothUnion(sdf_world(position_of_hit - tiny_change_y).distance_to_object1,
+						 sdf_world(position_of_hit - tiny_change_y).distance_to_object2,
+						 raymarch_global_settings.intersection_smooth_amount);
+  let tiny_change_in_y: f32 = up_tiny_change_in_y - down_tiny_change_in_y;
+
+  let up_tiny_change_in_z: f32 = opSmoothUnion(sdf_world(position_of_hit + tiny_change_z).distance_to_object1,
+					       sdf_world(position_of_hit + tiny_change_z).distance_to_object2,
+					       raymarch_global_settings.intersection_smooth_amount);
+  let down_tiny_change_in_z: f32 = opSmoothUnion(sdf_world(position_of_hit - tiny_change_z).distance_to_object1,
+						 sdf_world(position_of_hit - tiny_change_z).distance_to_object2,
+						 raymarch_global_settings.intersection_smooth_amount);
+  let tiny_change_in_z: f32 = up_tiny_change_in_z - down_tiny_change_in_z;
 
 
-  let up_tiny_change_in_y1: f32 = sdf_world(position_of_hit + tiny_change_y).distance_to_object1;
-  let down_tiny_change_in_y1: f32 = sdf_world(position_of_hit - tiny_change_y).distance_to_object1;
-  let tiny_change_in_y1: f32 = up_tiny_change_in_y1 - down_tiny_change_in_y1;
+  let normal_dir = vec3(tiny_change_in_x,
+			tiny_change_in_y,
+			tiny_change_in_z);
 
-
-  let up_tiny_change_in_z1: f32 = sdf_world(position_of_hit + tiny_change_z).distance_to_object1;
-  let down_tiny_change_in_z1: f32 = sdf_world(position_of_hit - tiny_change_z).distance_to_object1;
-  let tiny_change_in_z1: f32 = up_tiny_change_in_z1 - down_tiny_change_in_z1;
-
-
-  let normal_dir1 = vec3(
-		    tiny_change_in_x1,
-		    tiny_change_in_y1,
-		    tiny_change_in_z1,
-		    );
-
-  let normal1 = normalize(normal_dir1);
-
-  // DRY people are shaking rn
-  let up_tiny_change_in_x2: f32 = sdf_world(position_of_hit + tiny_change_x).distance_to_object2;
-  let down_tiny_change_in_x2: f32 = sdf_world(position_of_hit - tiny_change_x).distance_to_object2;
-  let tiny_change_in_x2: f32 = up_tiny_change_in_x2 - down_tiny_change_in_x2;
-
-
-  let up_tiny_change_in_y2: f32 = sdf_world(position_of_hit + tiny_change_y).distance_to_object2;
-  let down_tiny_change_in_y2: f32 = sdf_world(position_of_hit - tiny_change_y).distance_to_object2;
-  let tiny_change_in_y2: f32 = up_tiny_change_in_y2 - down_tiny_change_in_y2;
-
-
-  let up_tiny_change_in_z2: f32 = sdf_world(position_of_hit + tiny_change_z).distance_to_object2;
-  let down_tiny_change_in_z2: f32 = sdf_world(position_of_hit - tiny_change_z).distance_to_object2;
-  let tiny_change_in_z2: f32 = up_tiny_change_in_z2 - down_tiny_change_in_z2;
-
-
-  let normal_dir2 = vec3(
-		    tiny_change_in_x2,
-		    tiny_change_in_y2,
-		    tiny_change_in_z2,
-		    );
-
-  let normal2 = normalize(normal_dir2);
-
-  return SdfNormalOutput(normal1, normal2);
+  return normalize(normal_dir);
 }
-struct SdfNormalOutput {
- normal_obj_1: vec3<f32>,
- normal_obj_2: vec3<f32>,
-}
-
 
 struct RaymarchObjectDescriptor {
  world_position: vec3<f32>,

@@ -41,7 +41,7 @@ fn global_settings_ui(
                 ui.label("termination distance");
                 ui.add(egui::Slider::new(
                     &mut mat.extension.raymarch_global_settings.termination_distance,
-                    0.001..=0.5,
+                    0.00001..=0.5,
                 ));
             });
             ui.horizontal(|ui| {

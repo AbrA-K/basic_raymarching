@@ -235,27 +235,21 @@ fn spawn_shit(
     });
     commands.insert_resource(RaymarchMaterialHandle(rm_material_handle.clone()));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(2.0, 2.0, 2.0))),
+        Mesh3d(meshes.add(Cuboid::new(4.0, 4.0, 2.0))),
         MeshMaterial3d(rm_material_handle.clone()),
         NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
     // sphere
-    commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.5))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            perceptual_roughness: 0.0,
-            base_color: Color::Srgba(Srgba::rgb_u8(255, 0, 0)),
-            emissive: LinearRgba {
-                red: 1.0,
-                green: 1.0,
-                blue: 1.0,
-                alpha: 1.0,
-            },
-            ..Default::default()
-        })),
-        Transform::from_xyz(1.0, 0.5, 1.0),
-    ));
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Sphere::new(0.5))),
+    //     MeshMaterial3d(materials.add(StandardMaterial {
+    //         perceptual_roughness: 0.0,
+    //         base_color: Color::Srgba(Srgba::rgb_u8(255, 0, 0)),
+    //         ..Default::default()
+    //     })),
+    //     Transform::from_xyz(1.0, 0.5, 1.0),
+    // ));
     // light
     commands.spawn((
         PointLight {
