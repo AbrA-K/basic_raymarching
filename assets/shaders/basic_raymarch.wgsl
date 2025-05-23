@@ -40,7 +40,7 @@ fn fragment(
   var min_step_length = 1000.0; // TODO: change to +inf
   while dist_marched < raymarch_global_settings.far_clip {
       let sdf_out = sdf_world(curr_pos);
-      if opSmoothUnion(sdf_out.distance_to_object1, sdf_out.distance_to_object2, raymarch_global_settings.intersection_smooth_amount) < raymarch_global_settings.termination_distance {
+      if my_min(sdf_out.distance_to_object1, sdf_out.distance_to_object2) < raymarch_global_settings.termination_distance {
 	  // HIT!
 
 	  // color & material
@@ -74,9 +74,8 @@ fn fragment(
 	}
 
       var step: vec3<f32>;
-      let smin_distance = opSmoothUnion(sdf_out.distance_to_object1,
-					sdf_out.distance_to_object2,
-					raymarch_global_settings.intersection_smooth_amount);
+      let smin_distance = my_min(sdf_out.distance_to_object1,
+				 sdf_out.distance_to_object2);
       step = ray_dir * smin_distance;
       let step_length = length(step);
       if step_length < min_step_length {
@@ -88,7 +87,10 @@ fn fragment(
 
   // no hit :c
   var out: FragmentOutput;
-  out.color = vec4<f32>(0.0);
+  let min_step_normalized = min_step_length / raymarch_global_settings.glow_range;
+  let glow_amount = (clamp(min_step_normalized, 0.0, 1.0) * -1.0 + 1.0)
+    * raymarch_global_settings.glow_color.w;
+  out.color = vec4<f32>(raymarch_global_settings.glow_color.xyz, glow_amount);
   return out;
 }
 
@@ -140,6 +142,17 @@ fn sdf_object(ray_position: vec3<f32>, obj: RaymarchObjectDescriptor) -> f32 {
   return 100000.0;
 }
 
+fn my_min(a: f32, b: f32) -> f32 {
+  if raymarch_global_settings.intersection_method == 0 {
+      return opSmoothUnion(a, b, raymarch_global_settings.intersection_smooth_amount);
+    } else if raymarch_global_settings.intersection_method == 1 {
+      return opSmoothIntersect(a, b, raymarch_global_settings.intersection_smooth_amount);
+    } else if raymarch_global_settings.intersection_method == 2 {
+      return opSmoothSubtract(a, b, raymarch_global_settings.intersection_smooth_amount);
+    }
+  return 100000.0; // Todo: +inf
+}
+
 // ------------ SDF_FUNCTIONS ------------
 // I got them from: https://gist.github.com/munrocket/f247155fc22ecb8edf974d905c677de1
 fn sdf_circle(p: vec3<f32>, rad: f32) -> f32 {
@@ -158,7 +171,16 @@ fn sdConeBound(p: vec3f, h: f32, sincos: vec2f) -> f32 {
 fn opSmoothUnion(d1: f32, d2: f32, k: f32) -> f32 {
   let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0., 1.);
   return mix(d2, d1, h) - k * h * (1. - h);
+}
 
+fn opSmoothSubtract(d1: f32, d2: f32, k: f32) -> f32 {
+  let h = clamp(0.5 - 0.5 * (d1 + d2) / k, 0., 1.);
+  return mix(d1, -d2, h) + k * h * (1. - h);
+}
+
+fn opSmoothIntersect(d1: f32, d2: f32, k: f32) -> f32 {
+  let h = clamp(0.5 - 0.5 * (d2 - d1) / k, 0., 1.);
+  return mix(d2, d1, h) + k * h * (1. - h);
 }
 
 
@@ -174,28 +196,22 @@ fn get_normal_of_surface(position_of_hit: vec3<f32>) -> vec3<f32> {
   let tiny_change_y = vec3(0.0 , 0.001 , 0.0);
   let tiny_change_z = vec3(0.0 , 0.0 , 0.001);
 
-  let up_tiny_change_in_x: f32 = opSmoothUnion(sdf_world(position_of_hit + tiny_change_x).distance_to_object1,
-					       sdf_world(position_of_hit + tiny_change_x).distance_to_object2,
-					       raymarch_global_settings.intersection_smooth_amount);
-  let down_tiny_change_in_x: f32 = opSmoothUnion(sdf_world(position_of_hit - tiny_change_x).distance_to_object1,
-						 sdf_world(position_of_hit - tiny_change_x).distance_to_object2,
-						 raymarch_global_settings.intersection_smooth_amount);
+  let up_tiny_change_in_x: f32 = my_min(sdf_world(position_of_hit + tiny_change_x).distance_to_object1,
+					sdf_world(position_of_hit + tiny_change_x).distance_to_object2);
+  let down_tiny_change_in_x: f32 = my_min(sdf_world(position_of_hit - tiny_change_x).distance_to_object1,
+					  sdf_world(position_of_hit - tiny_change_x).distance_to_object2);
   let tiny_change_in_x: f32 = up_tiny_change_in_x - down_tiny_change_in_x;
 
-  let up_tiny_change_in_y: f32 = opSmoothUnion(sdf_world(position_of_hit + tiny_change_y).distance_to_object1,
-					       sdf_world(position_of_hit + tiny_change_y).distance_to_object2,
-					       raymarch_global_settings.intersection_smooth_amount);
-  let down_tiny_change_in_y: f32 = opSmoothUnion(sdf_world(position_of_hit - tiny_change_y).distance_to_object1,
-						 sdf_world(position_of_hit - tiny_change_y).distance_to_object2,
-						 raymarch_global_settings.intersection_smooth_amount);
+  let up_tiny_change_in_y: f32 = my_min(sdf_world(position_of_hit + tiny_change_y).distance_to_object1,
+					sdf_world(position_of_hit + tiny_change_y).distance_to_object2);
+  let down_tiny_change_in_y: f32 = my_min(sdf_world(position_of_hit - tiny_change_y).distance_to_object1,
+					  sdf_world(position_of_hit - tiny_change_y).distance_to_object2);
   let tiny_change_in_y: f32 = up_tiny_change_in_y - down_tiny_change_in_y;
 
-  let up_tiny_change_in_z: f32 = opSmoothUnion(sdf_world(position_of_hit + tiny_change_z).distance_to_object1,
-					       sdf_world(position_of_hit + tiny_change_z).distance_to_object2,
-					       raymarch_global_settings.intersection_smooth_amount);
-  let down_tiny_change_in_z: f32 = opSmoothUnion(sdf_world(position_of_hit - tiny_change_z).distance_to_object1,
-						 sdf_world(position_of_hit - tiny_change_z).distance_to_object2,
-						 raymarch_global_settings.intersection_smooth_amount);
+  let up_tiny_change_in_z: f32 = my_min(sdf_world(position_of_hit + tiny_change_z).distance_to_object1,
+					       sdf_world(position_of_hit + tiny_change_z).distance_to_object2);
+  let down_tiny_change_in_z: f32 = my_min(sdf_world(position_of_hit - tiny_change_z).distance_to_object1,
+					  sdf_world(position_of_hit - tiny_change_z).distance_to_object2);
   let tiny_change_in_z: f32 = up_tiny_change_in_z - down_tiny_change_in_z;
 
 

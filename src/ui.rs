@@ -41,8 +41,42 @@ fn global_settings_ui(
                 ui.label("termination distance");
                 ui.add(egui::Slider::new(
                     &mut mat.extension.raymarch_global_settings.termination_distance,
-                    0.00001..=0.5,
+                    0.0001..=0.5,
                 ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("glow_range");
+                ui.add(egui::Slider::new(
+                    &mut mat.extension.raymarch_global_settings.glow_range,
+                    0.0..=1.0,
+                ));
+            });
+            ui.horizontal(|ui| {
+                ui.label("glow_color");
+                let mut color32 =
+                    vec4_to_color32(&mat.extension.raymarch_global_settings.glow_color);
+                ui.color_edit_button_srgba(&mut color32);
+                mat.extension.raymarch_global_settings.glow_color = color32_to_vec4(color32);
+            });
+            ui.horizontal(|ui| {
+                ui.label("intersection method");
+                ui.vertical(|ui| {
+                    ui.radio_value(
+                        &mut mat.extension.raymarch_global_settings.intersection_method,
+                        IntersectionMethod::Or as u32,
+                        "1 OR 2",
+                    );
+                    ui.radio_value(
+                        &mut mat.extension.raymarch_global_settings.intersection_method,
+                        IntersectionMethod::And as u32,
+                        "1 AND 2",
+                    );
+                    ui.radio_value(
+                        &mut mat.extension.raymarch_global_settings.intersection_method,
+                        IntersectionMethod::Not as u32,
+                        "1 NOT 2",
+                    );
+                });
             });
             ui.horizontal(|ui| {
                 ui.label("smooth intersection");
@@ -97,49 +131,25 @@ fn object1_settings_ui(
     }
 }
 
-fn create_object_settings(
-    ui: &mut egui::Ui,
-    desc: &mut RaymarchObjectDescriptor,
-) {
+fn create_object_settings(ui: &mut egui::Ui, desc: &mut RaymarchObjectDescriptor) {
     ui.horizontal(|ui| {
         ui.label("Shape");
-        ui.radio_value(
-            &mut desc.shape_type_id,
-            Shape::Circle as u32,
-            "Sphere",
-        );
-        ui.radio_value(
-            &mut desc.shape_type_id,
-            Shape::Cube as u32,
-            "Cube",
-        );
-        ui.radio_value(
-            &mut desc.shape_type_id,
-            Shape::Cone as u32,
-            "Cone",
-        );
+        ui.radio_value(&mut desc.shape_type_id, Shape::Circle as u32, "Sphere");
+        ui.radio_value(&mut desc.shape_type_id, Shape::Cube as u32, "Cube");
+        ui.radio_value(&mut desc.shape_type_id, Shape::Cone as u32, "Cone");
     });
     ui.heading("Transform");
     ui.horizontal(|ui| {
         ui.label("x position");
-        ui.add(egui::Slider::new(
-            &mut desc.world_position.x,
-            -1.0..=1.0,
-        ))
+        ui.add(egui::Slider::new(&mut desc.world_position.x, -1.0..=1.0))
     });
     ui.horizontal(|ui| {
         ui.label("y position");
-        ui.add(egui::Slider::new(
-            &mut desc.world_position.y,
-            -1.0..=1.0,
-        ));
+        ui.add(egui::Slider::new(&mut desc.world_position.y, -1.0..=1.0));
     });
     ui.horizontal(|ui| {
         ui.label("z position");
-        ui.add(egui::Slider::new(
-            &mut desc.world_position.z,
-            -1.0..=1.0,
-        ));
+        ui.add(egui::Slider::new(&mut desc.world_position.z, -1.0..=1.0));
     });
     ui.horizontal(|ui| {
         ui.label("rotation x");
@@ -150,26 +160,17 @@ fn create_object_settings(
     });
     ui.horizontal(|ui| {
         ui.label("rotation over time");
-        ui.add(egui::Slider::new(
-            &mut desc.rotation_amount,
-            0.0..=1.0,
-        ))
+        ui.add(egui::Slider::new(&mut desc.rotation_amount, 0.0..=1.0))
     });
     ui.horizontal(|ui| {
         ui.label("translation over time");
-        ui.add(egui::Slider::new(
-            &mut desc.move_amout,
-            0.0..=1.0,
-        ))
+        ui.add(egui::Slider::new(&mut desc.move_amout, 0.0..=1.0))
     });
 
     ui.heading("Material");
     ui.horizontal(|ui| {
         ui.label("roughness");
-        ui.add(egui::Slider::new(
-            &mut desc.perceptual_roughness,
-            0.0..=1.0,
-        ))
+        ui.add(egui::Slider::new(&mut desc.perceptual_roughness, 0.0..=1.0))
     });
     ui.horizontal(|ui| {
         ui.label("base color");
@@ -179,10 +180,7 @@ fn create_object_settings(
     });
     ui.horizontal(|ui| {
         ui.label("reflectance");
-        let mut color = desc
-            .reflectance
-            .to_array()
-            .map(|e| (e * 255.0) as u8);
+        let mut color = desc.reflectance.to_array().map(|e| (e * 255.0) as u8);
         ui.color_edit_button_srgb(&mut color);
         desc.reflectance = Vec3::new(
             color[0] as f32 / 255.0,
@@ -198,17 +196,11 @@ fn create_object_settings(
     });
     ui.horizontal(|ui| {
         ui.label("metallic");
-        ui.add(egui::Slider::new(
-            &mut desc.metallic,
-            0.0..=1.0,
-        ))
+        ui.add(egui::Slider::new(&mut desc.metallic, 0.0..=1.0))
     });
     ui.horizontal(|ui| {
         ui.label("clearcoat");
-        ui.add(egui::Slider::new(
-            &mut desc.clearcoat,
-            0.0..=1.0,
-        ))
+        ui.add(egui::Slider::new(&mut desc.clearcoat, 0.0..=1.0))
     });
     ui.horizontal(|ui| {
         ui.label("clearcoat roughness");
@@ -243,4 +235,11 @@ enum Shape {
     Circle = 1,
     Cube = 2,
     Cone = 3,
+}
+
+#[derive(PartialEq)]
+enum IntersectionMethod {
+    Or = 0,
+    And = 1,
+    Not = 2,
 }

@@ -235,7 +235,7 @@ fn spawn_shit(
     });
     commands.insert_resource(RaymarchMaterialHandle(rm_material_handle.clone()));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(4.0, 4.0, 2.0))),
+        Mesh3d(meshes.add(Cuboid::new(4.0, 4.0, 4.0))),
         MeshMaterial3d(rm_material_handle.clone()),
         NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
