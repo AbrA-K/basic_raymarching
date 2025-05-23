@@ -12,12 +12,18 @@ use crate::{RaymarchMaterial, RaymarchMaterialHandle, RaymarchObjectDescriptor, 
 pub struct MyRaymarchUi;
 impl Plugin for MyRaymarchUi {
     fn build(&self, app: &mut App) {
+        app.init_resource::<UiState>();
         app.add_plugins(EguiPlugin {
             enable_multipass_for_primary_context: true,
         });
         app.add_systems(
             EguiContextPass,
-            (camera_settings_ui, object1_settings_ui, global_settings_ui),
+            (
+                camera_settings_ui,
+                object_settings_ui,
+                global_settings_ui,
+                ui_settings_ui,
+            ),
         );
     }
 }
@@ -26,7 +32,11 @@ fn global_settings_ui(
     mut contexts: EguiContexts,
     mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
     rm_material_handle: Res<RaymarchMaterialHandle>,
+    ui_state: Res<UiState>,
 ) {
+    if ui_state.into_inner() == &UiState::Minimal {
+        return;
+    }
     let maybe_mat = rm_materials.get_mut(&rm_material_handle.0);
     if let Some(mat) = maybe_mat {
         egui::Window::new("Global Settings").show(contexts.ctx_mut(), |ui| {
@@ -92,7 +102,14 @@ fn global_settings_ui(
     }
 }
 
-fn camera_settings_ui(mut contexts: EguiContexts, mut cameras: Query<&mut SpinningCam>) {
+fn camera_settings_ui(
+    mut contexts: EguiContexts,
+    mut cameras: Query<&mut SpinningCam>,
+    ui_state: Res<UiState>,
+) {
+    if ui_state.into_inner() == &UiState::Minimal {
+        return;
+    }
     egui::Window::new("Camera Settings").show(contexts.ctx_mut(), |ui| {
         for mut cam in cameras.iter_mut() {
             ui.horizontal(|ui| {
@@ -115,11 +132,55 @@ fn camera_settings_ui(mut contexts: EguiContexts, mut cameras: Query<&mut Spinni
     });
 }
 
-fn object1_settings_ui(
+fn ui_settings_ui(
     mut contexts: EguiContexts,
+    mut ui_state: ResMut<UiState>,
     mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
     rm_material_handle: Res<RaymarchMaterialHandle>,
 ) {
+    egui::Window::new("Quick Settings").show(contexts.ctx_mut(), |ui| {
+        ui.horizontal(|ui| {
+            ui.label("UI Mode");
+            ui.vertical(|ui| {
+                ui.radio_value(&mut *ui_state, UiState::Minimal, "Minimal");
+                ui.radio_value(&mut *ui_state, UiState::Full, "Full");
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.label("Demos");
+            let maybe_mat = rm_materials.get_mut(&rm_material_handle.0);
+            if let Some(mat) = maybe_mat {
+                ui.horizontal(|ui| {
+                    ui.label("load config");
+                    ui.vertical(|ui| {
+                        let default_prototype_button = ui.button("Default");
+                        if default_prototype_button.clicked() {
+                            mat.extension = RaymarchMaterial::get_basic_config()
+                        }
+                        let smooth_prototype_button = ui.button("Smooth Intersection");
+                        if smooth_prototype_button.clicked() {
+                            mat.extension = RaymarchMaterial::get_smooth_config()
+                        }
+                        let intersection_prototype_button = ui.button("NOT Intersection");
+                        if intersection_prototype_button.clicked() {
+                            mat.extension = RaymarchMaterial::get_intersection_config()
+                        }
+                    });
+                });
+            }
+        });
+    });
+}
+
+fn object_settings_ui(
+    mut contexts: EguiContexts,
+    mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
+    rm_material_handle: Res<RaymarchMaterialHandle>,
+    ui_state: Res<UiState>,
+) {
+    if ui_state.into_inner() == &UiState::Minimal {
+        return;
+    }
     let rm_material = rm_materials.get_mut(&rm_material_handle.0);
     if let Some(mat) = rm_material {
         egui::Window::new("Object 1 Settings").show(contexts.ctx_mut(), |ui| {
@@ -242,4 +303,16 @@ enum IntersectionMethod {
     Or = 0,
     And = 1,
     Not = 2,
+}
+
+#[derive(Resource, PartialEq)]
+enum UiState {
+    Full,
+    Minimal,
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        UiState::Minimal
+    }
 }

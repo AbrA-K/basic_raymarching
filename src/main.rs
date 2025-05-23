@@ -208,6 +208,49 @@ impl MaterialExtension for RaymarchMaterial {
     }
 }
 
+impl RaymarchMaterial {
+    fn get_basic_config() -> Self {
+        let mut out = RaymarchMaterial {
+            material1: RaymarchObjectDescriptor::default(),
+            material2: RaymarchObjectDescriptor::default(),
+            raymarch_global_settings: RaymarchGlobalSettings::default()
+        };
+        out.material2.world_position = Vec3::new(-0.5, 0.75, 0.4);
+        out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
+        out.material2.rotation_amount = 0.5;
+        out.material2.shape_type_id = 2;
+        return out;
+    }
+    fn get_smooth_config() -> Self {
+        let mut out = RaymarchMaterial {
+            material1: RaymarchObjectDescriptor::default(),
+            material2: RaymarchObjectDescriptor::default(),
+            raymarch_global_settings: RaymarchGlobalSettings::default()
+        };
+        out.material2.world_position = Vec3::new(-0.5, 0.75, 0.4);
+        out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
+        out.material2.shape_type_id = 2;
+        out.material2.metallic = 0.6;
+        out.material2.rotation_amount = 0.5;
+        out.raymarch_global_settings.intersection_smooth_amount = 0.5;
+        return out;
+    }
+    fn get_intersection_config() -> Self {
+        let mut out = RaymarchMaterial {
+            material1: RaymarchObjectDescriptor::default(),
+            material2: RaymarchObjectDescriptor::default(),
+            raymarch_global_settings: RaymarchGlobalSettings::default()
+        };
+        out.material2.world_position = Vec3::new(-0.5, 0.75, 0.4);
+        out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
+        out.material2.shape_type_id = 2;
+        out.material2.metallic = 0.6;
+        out.material2.rotation_amount = 0.5;
+        out.raymarch_global_settings.intersection_method = 2;
+        return out;
+    }
+}
+
 fn spawn_shit(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -227,11 +270,7 @@ fn spawn_shit(
             alpha_mode: AlphaMode::Blend,
             ..Default::default()
         },
-        extension: RaymarchMaterial {
-            material1: RaymarchObjectDescriptor::default(),
-            material2: RaymarchObjectDescriptor::default(),
-	    raymarch_global_settings: RaymarchGlobalSettings::default(),
-        },
+        extension: RaymarchMaterial::get_basic_config(),
     });
     commands.insert_resource(RaymarchMaterialHandle(rm_material_handle.clone()));
     commands.spawn((
