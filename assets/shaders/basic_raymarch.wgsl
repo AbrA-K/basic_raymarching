@@ -254,7 +254,9 @@ struct RaymarchGlobalSettings {
  glow_range: f32,
  glow_color: vec4<f32>,
  far_clip: f32,
- termination_distance: f32
+ termination_distance: f32,
+ // prepass has no clue about globals.time (why!?)
+ time: f32,
 }
 
 

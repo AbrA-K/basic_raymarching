@@ -4,6 +4,7 @@ use ui::MyRaymarchUi;
 
 use bevy::{
     core_pipeline::prepass::DepthPrepass,
+    log::tracing::instrument::WithSubscriber,
     math::VectorSpace,
     pbr::{ExtendedMaterial, MaterialExtension, NotShadowCaster},
     prelude::*,
@@ -21,7 +22,7 @@ fn main() {
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>::default(),
         ))
         .add_systems(Startup, (spawn_camera, spawn_shit))
-        .add_systems(Update, spin_camera)
+        .add_systems(Update, (spin_camera, update_raymarch_settings_time))
         .run();
 }
 
@@ -50,6 +51,17 @@ fn spin_camera(mut cams: Query<(&mut Transform, &SpinningCam)>, time: Res<Time>)
         });
 }
 
+fn update_raymarch_settings_time(
+    mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
+    rm_material_handle: Res<RaymarchMaterialHandle>,
+    time: Res<Time>,
+) {
+    let maybe_mat = rm_materials.get_mut(&rm_material_handle.0);
+    if let Some(mat) = maybe_mat {
+        mat.extension.raymarch_global_settings.time = time.elapsed_secs();
+    }
+}
+
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d {
@@ -64,9 +76,6 @@ fn spawn_camera(mut commands: Commands) {
         },
         Msaa::Off,
         DepthPrepass,
-        // DeferredPrepass,
-        // NormalPrepass,
-        // MotionVectorPrepass,
     ));
 }
 
@@ -88,11 +97,11 @@ struct RaymarchObjectDescriptor {
     // but since this struct is passed to wgpu, I'm not sure how this would be passed
     // make it work first - I'm not shipping this to prod or something
     // TODO: maybe.. don't do this lol
-    /// circle = 1
+    /// sphere = 1
     /// square = 2
     /// cone = 3
     shape_type_id: u32,
-    /// circle -> radius
+    /// sphere -> radius
     /// square -> side lenght
     /// cone -> height
     shape_var1: f32,
@@ -158,17 +167,20 @@ struct RaymarchGlobalSettings {
     glow_range: f32,
     glow_color: Vec4,
     far_clip: f32,
-    termination_distance: f32
+    termination_distance: f32,
+    time: f32,
 }
+
 impl Default for RaymarchGlobalSettings {
     fn default() -> Self {
         return RaymarchGlobalSettings {
             intersection_method: 0,
             intersection_smooth_amount: 0.0,
-	    glow_range: 0.0,
-	    glow_color: Vec4::ZERO,
-	    far_clip: 10.0,
-	    termination_distance: 0.001,
+            glow_range: 0.0,
+            glow_color: Vec4::ZERO,
+            far_clip: 10.0,
+            termination_distance: 0.001,
+            time: 0.0,
         };
     }
 }
@@ -213,7 +225,7 @@ impl RaymarchMaterial {
         let mut out = RaymarchMaterial {
             material1: RaymarchObjectDescriptor::default(),
             material2: RaymarchObjectDescriptor::default(),
-            raymarch_global_settings: RaymarchGlobalSettings::default()
+            raymarch_global_settings: RaymarchGlobalSettings::default(),
         };
         out.material2.world_position = Vec3::new(-0.5, 0.75, 0.4);
         out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
@@ -225,7 +237,7 @@ impl RaymarchMaterial {
         let mut out = RaymarchMaterial {
             material1: RaymarchObjectDescriptor::default(),
             material2: RaymarchObjectDescriptor::default(),
-            raymarch_global_settings: RaymarchGlobalSettings::default()
+            raymarch_global_settings: RaymarchGlobalSettings::default(),
         };
         out.material2.world_position = Vec3::new(-0.5, 0.75, 0.4);
         out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
@@ -239,7 +251,7 @@ impl RaymarchMaterial {
         let mut out = RaymarchMaterial {
             material1: RaymarchObjectDescriptor::default(),
             material2: RaymarchObjectDescriptor::default(),
-            raymarch_global_settings: RaymarchGlobalSettings::default()
+            raymarch_global_settings: RaymarchGlobalSettings::default(),
         };
         out.material2.world_position = Vec3::new(-0.5, 0.75, 0.4);
         out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
@@ -255,6 +267,7 @@ fn spawn_shit(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
     mut raymarch_material: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
 ) {
     // circular base
@@ -266,7 +279,8 @@ fn spawn_shit(
     // cube
     let rm_material_handle = raymarch_material.add(ExtendedMaterial {
         base: StandardMaterial {
-            base_color: bevy::color::palettes::css::BLUE.into(),
+            // base_color_texture: Some(asset_server.load("icon.png")),
+            // base_color: bevy::color::palettes::css::BLUE.into(),
             alpha_mode: AlphaMode::Blend,
             ..Default::default()
         },
@@ -276,19 +290,14 @@ fn spawn_shit(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(4.0, 4.0, 4.0))),
         MeshMaterial3d(rm_material_handle.clone()),
-        NotShadowCaster,
+        // NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
-    // sphere
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Sphere::new(0.5))),
-    //     MeshMaterial3d(materials.add(StandardMaterial {
-    //         perceptual_roughness: 0.0,
-    //         base_color: Color::Srgba(Srgba::rgb_u8(255, 0, 0)),
-    //         ..Default::default()
-    //     })),
-    //     Transform::from_xyz(1.0, 0.5, 1.0),
-    // ));
+    commands.spawn((
+        Mesh3d(meshes.add(Cylinder::new(0.2, 5.0))),
+        MeshMaterial3d(materials.add(Color::WHITE)),
+        Transform::from_xyz(0.4, 0.2, 0.4),
+    ));
     // light
     commands.spawn((
         PointLight {
