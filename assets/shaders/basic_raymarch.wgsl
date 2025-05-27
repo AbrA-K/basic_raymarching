@@ -16,7 +16,6 @@
 @group(2) @binding(101) var<uniform> object2: RaymarchObjectDescriptor;
 @group(2) @binding(102) var<uniform> raymarch_global_settings: RaymarchGlobalSettings;
 
-
 const NEAR_CLIP = 0.5; // TODO: this is unused
 
 @fragment
@@ -24,15 +23,69 @@ fn fragment(
     mesh: VertexOutput,
     @builtin(sample_index) sample_index: u32,
 	    ) ->  FragmentOutput {
+  let march = perform_march(mesh.position.xy, sample_index);
+  let sdf_out = sdf_world(march.hit_pos);
+
+  if march.has_hit {
+      // return color & material
+      var out: FragmentOutput;
+      var normal = get_normal_of_surface(march.hit_pos);
+      var material: StandardMaterial;
+      var distances = vec2<f32>(sdf_out.distance_to_1object, sdf_out.distance_to_2object);
+      distances = normalize(distances);
+      let material_lerp_amount = ((distances.x - distances.y) + 1.0) * 0.5;
+      let desc = lerp_descriptors(object1, object2, material_lerp_amount);
+
+      material = obj_descriptor_to_material(desc);
+      var pbr_input = pbr_input_new();
+      pbr_input.material = material;
+      pbr_input.world_normal = normal;
+      pbr_input.N = normal; // this is also the normal??
+      pbr_input.V = normal; // this is also the normal??
+      pbr_input.world_position = vec4<f32>(march.hit_pos, 1.0);
+      out.color = apply_pbr_lighting(pbr_input);
+
+      // TODO: write to depth texture
+      // right now: if something is in front, I just discard the pixel!
+      let depth = bevy_pbr::prepass_utils::prepass_depth(mesh.position, sample_index);
+      let clip_curr_pos = view.clip_from_world * vec4<f32>(march.hit_pos, 1.0);
+      let ndc_curr_pos = clip_curr_pos.xyz / clip_curr_pos.w;
+      let curr_pos_depth = ndc_curr_pos.z;
+      out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+      if depth > curr_pos_depth {
+	  out.color.w = 0.0;
+	}
+      return out;
+    } else {
+    // no hit :c
+    var out: FragmentOutput;
+    let min_step_normalized = march.min_dist_from_object / raymarch_global_settings.glow_range;
+    let glow_amount = (clamp(min_step_normalized, 0.0, 1.0) * -1.0 + 1.0)
+      * raymarch_global_settings.glow_color.w;
+    out.color = vec4<f32>(raymarch_global_settings.glow_color.xyz, glow_amount);
+    return out;
+  }
+}
+
+// depending if it has_hit some data is left empty/useless
+// unions would go crazy here
+struct MarchOutput {
+ has_hit: bool,
+ hit_pos: vec3<f32>,
+ min_dist_from_object: f32,
+};
+fn perform_march(
+		 coord: vec2<f32>,
+		 sample_index: u32,
+) -> MarchOutput {
   // get the Ray direction
   let cam_pos = view.world_position;
-  var viewport_uv = coords_to_viewport_uv(mesh.position.xy, view.viewport) * 2.0 - 1.0;
+  var viewport_uv = coords_to_viewport_uv(coord, view.viewport) * 2.0 - 1.0;
   viewport_uv.y *= -1;
   let clip = vec4<f32>(viewport_uv, 1.0, 1.0);
   var world = view.world_from_clip * clip;
   world /= world.w;
   let ray_dir = normalize(world.xyz - cam_pos);
-  let depth = bevy_pbr::prepass_utils::prepass_depth(mesh.position, sample_index);
 
   // start the marching
   var curr_pos = cam_pos;
@@ -40,42 +93,16 @@ fn fragment(
   var min_step_length = 1000.0; // TODO: change to +inf
   while dist_marched < raymarch_global_settings.far_clip {
       let sdf_out = sdf_world(curr_pos);
-      if my_min(sdf_out.distance_to_object1, sdf_out.distance_to_object2) < raymarch_global_settings.termination_distance {
+      if my_min(sdf_out.distance_to_1object, sdf_out.distance_to_2object)
+		 < raymarch_global_settings.termination_distance {
 	  // HIT!
-
-	  // color & material
-	  var out: FragmentOutput;
-	  var normal = get_normal_of_surface(curr_pos);
-	  var material: StandardMaterial;
-	  var distances = vec2<f32>(sdf_out.distance_to_object1, sdf_out.distance_to_object2);
-	  distances = normalize(distances);
-	  let material_lerp_amount = ((distances.x - distances.y) + 1.0) * 0.5;
-	  let desc = lerp_descriptors(object1, object2, material_lerp_amount);
-	  material = obj_descriptor_to_material(desc);
-	  var pbr_input = pbr_input_from_standard_material(mesh, true);
-	  pbr_input.material = material;
-	  pbr_input.world_normal = normal;
-	  pbr_input.N = normal; // this is also the normal??
-	  pbr_input.V = normal; // this is also the normal??
-	  pbr_input.world_position = vec4<f32>(curr_pos, 1.0);
-	  out.color = apply_pbr_lighting(pbr_input);
-
-	  // TODO: write to depth texture
-	  // right now: if something is in front, I just discard the pixel!
-	  let clip_curr_pos = view.clip_from_world * vec4<f32>(curr_pos, 1.0);
-	  let ndc_curr_pos = clip_curr_pos.xyz / clip_curr_pos.w;
-	  let curr_pos_depth = ndc_curr_pos.z;
-	  out.color = main_pass_post_lighting_processing(pbr_input, out.color);
-	  if depth > curr_pos_depth {
-	      out.color.w = 0.0;
-	    }
-
-	  return out;
+	  return MarchOutput(true, curr_pos, 0.0);
 	}
 
+      // no hit yet, continue marching..
       var step: vec3<f32>;
-      let smin_distance = my_min(sdf_out.distance_to_object1,
-				 sdf_out.distance_to_object2);
+      let smin_distance = my_min(sdf_out.distance_to_1object,
+				 sdf_out.distance_to_2object);
       step = ray_dir * smin_distance;
       let step_length = length(step);
       if step_length < min_step_length {
@@ -86,61 +113,70 @@ fn fragment(
     }
 
   // no hit :c
-  var out: FragmentOutput;
-  let min_step_normalized = min_step_length / raymarch_global_settings.glow_range;
-  let glow_amount = (clamp(min_step_normalized, 0.0, 1.0) * -1.0 + 1.0)
-    * raymarch_global_settings.glow_color.w;
-  out.color = vec4<f32>(raymarch_global_settings.glow_color.xyz, glow_amount);
-  return out;
+  return MarchOutput(false, vec3<f32>(0.0), min_step_length);
 }
 
 struct SdfOutput {
- distance_to_object1: f32,
- distance_to_object2: f32,
+ distance_to_1object: f32,
+ distance_to_2object: f32,
 }
-
 fn sdf_world(ray_position: vec3<f32>) -> SdfOutput {
   let rp1 = translate_ray(ray_position, object1);
   let rp2 = translate_ray(ray_position, object2);
 
-  let distance_to_object1 = sdf_object(rp1, object1);
-  let distance_to_object2 = sdf_object(rp2, object2);
-  return SdfOutput(distance_to_object1, distance_to_object2);
-}
-
-// TODO: implement y and z euler angles
-fn translate_ray(r: vec3<f32>, obj: RaymarchObjectDescriptor) -> vec3<f32> {
-  var out = r;
-  // translation
-  var added_translation = vec3<f32>(0.0);
-  added_translation.x = sin(globals.time * 0.5) * obj.move_amount;
-  added_translation.y = cos(globals.time) * obj.move_amount;
-  added_translation.z = cos(globals.time) * obj.move_amount * 0.2;
-  out -= obj.world_position - added_translation;
-
-  // rotation
-  let added_rotation = obj.rotation_amount * globals.time;
-  out = (vec4<f32>(out, 1.0) * rotation_mat_x(obj.rotation.x + added_rotation)).xyz;
-  return out;
+  let distance_to_1object = sdf_object(rp1, object1);
+  let distance_to_2object = sdf_object(rp2, object2);
+  return SdfOutput(distance_to_1object, distance_to_2object);
 }
 
 fn sdf_object(ray_position: vec3<f32>, obj: RaymarchObjectDescriptor) -> f32 {
   if obj.shape_type_id == 1 {
-      return sdf_circle(ray_position, obj.shape_var1);
+      return sdf_circle(ray_position, obj.shape_1var);
     } else if obj.shape_type_id == 2 {
-      return sdBox(ray_position, vec3<f32>(obj.shape_var1));
+      return sdBox(ray_position, vec3<f32>(obj.shape_1var));
     } else if obj.shape_type_id == 3 {
       // for some reason, the cone default position is really low
       // fix it here
       var rp_higher = ray_position;
       rp_higher.y -= 0.25;
       return sdConeBound(rp_higher,
-			 obj.shape_var1,
-			 vec2<f32>(sin(obj.shape_var2),
-				   cos(obj.shape_var2)));
+			 obj.shape_1var,
+			 vec2<f32>(sin(obj.shape_2var),
+				   cos(obj.shape_2var)));
     }
   return 100000.0;
 }
+
+//   ,--.                                 ,---.                                  ,--.  ,--.
+// ,-'  '-.,--.--. ,--,--.,--,--,  ,---. /  .-' ,---. ,--.--.,--,--,--. ,--,--.,-'  '-.`--' ,---. ,--,--,
+// '-.  .-'|  .--'' ,-.  ||      \(  .-' |  `-,| .-. ||  .--'|        |' ,-.  |'-.  .-',--.| .-. ||      \
+//   |  |  |  |   \ '-'  ||  ||  |.-'  `)|  .-'' '-' '|  |   |  |  |  |\ '-'  |  |  |  |  |' '-' '|  ||  |
+//   `--'  `--'    `--`--'`--''--'`----' `--'   `---' `--'   `--`--`--' `--`--'  `--'  `--' `---' `--''--'
+// transformation
+// TODO: implement y and z euler angles
+fn translate_ray(r: vec3<f32>, obj: RaymarchObjectDescriptor) -> vec3<f32> {
+  var out = r;
+  // translation
+  var added_translation = vec3<f32>(0.0);
+  added_translation.x = sin(raymarch_global_settings.time * 0.5) * obj.move_amount;
+  added_translation.y = cos(raymarch_global_settings.time) * obj.move_amount;
+  added_translation.z = cos(raymarch_global_settings.time) * obj.move_amount * 0.2;
+  out -= obj.world_position - added_translation;
+
+  // rotation
+  let added_rotation = obj.rotation_amount * raymarch_global_settings.time;
+  out = (vec4<f32>(out, 1.0) * rotation_mat_x(obj.rotation.x + added_rotation)).xyz;
+  return out;
+}
+
+fn rotation_mat_x(angle_x: f32) -> mat4x4<f32> {
+  return mat4x4<f32>(
+		     vec4<f32>(1.0, 0.0, 0.0, 0.0),
+		     vec4<f32>(0.0, cos(angle_x), sin(angle_x), 0.0),
+		     vec4<f32>(0.0, -sin(angle_x), cos(angle_x), 0.0),
+		     vec4<f32>(0.0, 0.0, 0.0, 1.0));
+}
+
 
 fn my_min(a: f32, b: f32) -> f32 {
   if raymarch_global_settings.intersection_method == 0 {
@@ -153,7 +189,12 @@ fn my_min(a: f32, b: f32) -> f32 {
   return 100000.0; // Todo: +inf
 }
 
-// ------------ SDF_FUNCTIONS ------------
+
+//  ,---.  ,------.  ,------.    ,------.                        ,--.  ,--.
+// '   .-' |  .-.  \ |  .---'    |  .---',--.,--.,--,--,  ,---.,-'  '-.`--' ,---. ,--,--,  ,---.
+// `.  `-. |  |  \  :|  `--,     |  `--, |  ||  ||      \| .--''-.  .-',--.| .-. ||      \(  .-'
+// .-'    ||  '--'  /|  |`       |  |`   '  ''  '|  ||  |\ `--.  |  |  |  |' '-' '|  ||  |.-'  `)
+// `-----' `-------' `--'        `--'     `----' `--''--' `---'  `--'  `--' `---' `--''--'`----'
 // I got them from: https://gist.github.com/munrocket/f247155fc22ecb8edf974d905c677de1
 fn sdf_circle(p: vec3<f32>, rad: f32) -> f32 {
   return length(p) - rad;
@@ -196,22 +237,22 @@ fn get_normal_of_surface(position_of_hit: vec3<f32>) -> vec3<f32> {
   let tiny_change_y = vec3(0.0 , 0.001 , 0.0);
   let tiny_change_z = vec3(0.0 , 0.0 , 0.001);
 
-  let up_tiny_change_in_x: f32 = my_min(sdf_world(position_of_hit + tiny_change_x).distance_to_object1,
-					sdf_world(position_of_hit + tiny_change_x).distance_to_object2);
-  let down_tiny_change_in_x: f32 = my_min(sdf_world(position_of_hit - tiny_change_x).distance_to_object1,
-					  sdf_world(position_of_hit - tiny_change_x).distance_to_object2);
+  let up_tiny_change_in_x: f32 = my_min(sdf_world(position_of_hit + tiny_change_x).distance_to_1object,
+					sdf_world(position_of_hit + tiny_change_x).distance_to_2object);
+  let down_tiny_change_in_x: f32 = my_min(sdf_world(position_of_hit - tiny_change_x).distance_to_1object,
+					  sdf_world(position_of_hit - tiny_change_x).distance_to_2object);
   let tiny_change_in_x: f32 = up_tiny_change_in_x - down_tiny_change_in_x;
 
-  let up_tiny_change_in_y: f32 = my_min(sdf_world(position_of_hit + tiny_change_y).distance_to_object1,
-					sdf_world(position_of_hit + tiny_change_y).distance_to_object2);
-  let down_tiny_change_in_y: f32 = my_min(sdf_world(position_of_hit - tiny_change_y).distance_to_object1,
-					  sdf_world(position_of_hit - tiny_change_y).distance_to_object2);
+  let up_tiny_change_in_y: f32 = my_min(sdf_world(position_of_hit + tiny_change_y).distance_to_1object,
+					sdf_world(position_of_hit + tiny_change_y).distance_to_2object);
+  let down_tiny_change_in_y: f32 = my_min(sdf_world(position_of_hit - tiny_change_y).distance_to_1object,
+					  sdf_world(position_of_hit - tiny_change_y).distance_to_2object);
   let tiny_change_in_y: f32 = up_tiny_change_in_y - down_tiny_change_in_y;
 
-  let up_tiny_change_in_z: f32 = my_min(sdf_world(position_of_hit + tiny_change_z).distance_to_object1,
-					       sdf_world(position_of_hit + tiny_change_z).distance_to_object2);
-  let down_tiny_change_in_z: f32 = my_min(sdf_world(position_of_hit - tiny_change_z).distance_to_object1,
-					  sdf_world(position_of_hit - tiny_change_z).distance_to_object2);
+  let up_tiny_change_in_z: f32 = my_min(sdf_world(position_of_hit + tiny_change_z).distance_to_1object,
+					       sdf_world(position_of_hit + tiny_change_z).distance_to_2object);
+  let down_tiny_change_in_z: f32 = my_min(sdf_world(position_of_hit - tiny_change_z).distance_to_1object,
+					  sdf_world(position_of_hit - tiny_change_z).distance_to_2object);
   let tiny_change_in_z: f32 = up_tiny_change_in_z - down_tiny_change_in_z;
 
 
@@ -222,15 +263,20 @@ fn get_normal_of_surface(position_of_hit: vec3<f32>) -> vec3<f32> {
   return normalize(normal_dir);
 }
 
+//                 ,--. ,---.
+// ,--.,--.,--,--, `--'/  .-' ,---. ,--.--.,--,--,--. ,---.
+// |  ||  ||      \,--.|  `-,| .-. ||  .--'|        |(  .-'
+// '  ''  '|  ||  ||  ||  .-'' '-' '|  |   |  |  |  |.-'  `)
+//  `----' `--''--'`--'`--'   `---' `--'   `--`--`--'`----'
+// uniforms
 struct RaymarchObjectDescriptor {
  world_position: vec3<f32>,
  rotation: vec3<f32>,
  move_amount: f32,
  rotation_amount: f32,
- // read src/main.rs RaymarchObjectDescriptor for explaination
  shape_type_id: u32,
- shape_var1: f32,
- shape_var2: f32,
+ shape_1var: f32,
+ shape_2var: f32,
  base_color: vec4<f32>,
  emissive: vec4<f32>,
  reflectance: vec3<f32>,
@@ -255,13 +301,20 @@ struct RaymarchGlobalSettings {
  glow_color: vec4<f32>,
  far_clip: f32,
  termination_distance: f32,
- // prepass has no clue about globals.time (why!?)
  time: f32,
 }
 
 
-/// used for getting the material transition between 2 objects
-/// lerp_val is 0.0-1.0, where 0 is just at desc1, and 1 is just at desc2.
+
+//                     ,--.                ,--.        ,--.
+// ,--,--,--. ,--,--.,-'  '-. ,---. ,--.--.`--' ,--,--.|  | ,---.
+// |        |' ,-.  |'-.  .-'| .-. :|  .--',--.' ,-.  ||  |(  .-'
+// |  |  |  |\ '-'  |  |  |  \   --.|  |   |  |\ '-'  ||  |.-'  `)
+// `--`--`--' `--`--'  `--'   `----'`--'   `--' `--`--'`--'`----'
+// materials
+
+// used for getting the material transition between 2 objects
+// lerp_val is 0.0-1.0, where 0 is just at desc1, and 1 is just at desc2.
 fn lerp_descriptors(desc1: RaymarchObjectDescriptor,
 		    desc2: RaymarchObjectDescriptor,
 		    lerp_val: f32) -> RaymarchObjectDescriptor {
@@ -311,12 +364,4 @@ fn obj_descriptor_to_material(desc: RaymarchObjectDescriptor) -> StandardMateria
   mat.anisotropy_rotation = desc.anisotropy_rotation;
 
   return mat;
-}
-
-fn rotation_mat_x(angle_x: f32) -> mat4x4<f32> {
-  return mat4x4<f32>(
-		     vec4<f32>(1.0, 0.0, 0.0, 0.0),
-		     vec4<f32>(0.0, cos(angle_x), sin(angle_x), 0.0),
-		     vec4<f32>(0.0, -sin(angle_x), cos(angle_x), 0.0),
-		     vec4<f32>(0.0, 0.0, 0.0, 1.0));
 }

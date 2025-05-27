@@ -14,7 +14,7 @@ impl Plugin for MyRaymarchUi {
     fn build(&self, app: &mut App) {
         app.init_resource::<UiState>();
         app.add_plugins(EguiPlugin {
-            enable_multipass_for_primary_context: true,
+            enable_multipass_for_primary_context: false,
         });
         app.add_systems(
             EguiContextPass,

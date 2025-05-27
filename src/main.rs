@@ -21,7 +21,7 @@ fn main() {
             MyRaymarchUi,
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>::default(),
         ))
-        .add_systems(Startup, (spawn_camera, spawn_shit))
+        .add_systems(Startup, spawn_shit)
         .add_systems(Update, (spin_camera, update_raymarch_settings_time))
         .run();
 }
@@ -51,6 +51,7 @@ fn spin_camera(mut cams: Query<(&mut Transform, &SpinningCam)>, time: Res<Time>)
         });
 }
 
+// update the elapsed time that I pass to the shader
 fn update_raymarch_settings_time(
     mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
     rm_material_handle: Res<RaymarchMaterialHandle>,
@@ -60,23 +61,6 @@ fn update_raymarch_settings_time(
     if let Some(mat) = maybe_mat {
         mat.extension.raymarch_global_settings.time = time.elapsed_secs();
     }
-}
-
-fn spawn_camera(mut commands: Commands) {
-    commands.spawn((
-        Camera3d {
-            ..Default::default()
-        },
-        SpinningCam {
-            height: 2.0,
-            distance: 4.0,
-            speed: 0.5,
-            sway_amount: 1.0,
-            look_at: Vec3::new(0.0, 0.5, 0.0),
-        },
-        Msaa::Off,
-        DepthPrepass,
-    ));
 }
 
 // info to pass to the shader
@@ -195,6 +179,7 @@ struct RaymarchMaterial {
     #[uniform(102)]
     raymarch_global_settings: RaymarchGlobalSettings,
 }
+
 impl MaterialExtension for RaymarchMaterial {
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
         "shaders/basic_raymarch.wgsl".into()
@@ -233,6 +218,7 @@ impl RaymarchMaterial {
         out.material2.shape_type_id = 2;
         return out;
     }
+
     fn get_smooth_config() -> Self {
         let mut out = RaymarchMaterial {
             material1: RaymarchObjectDescriptor::default(),
@@ -247,6 +233,7 @@ impl RaymarchMaterial {
         out.raymarch_global_settings.intersection_smooth_amount = 0.5;
         return out;
     }
+
     fn get_intersection_config() -> Self {
         let mut out = RaymarchMaterial {
             material1: RaymarchObjectDescriptor::default(),
@@ -270,12 +257,29 @@ fn spawn_shit(
     asset_server: Res<AssetServer>,
     mut raymarch_material: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
 ) {
+    // camera
+    commands.spawn((
+        Camera3d {
+            ..Default::default()
+        },
+        SpinningCam {
+            height: 2.0,
+            distance: 4.0,
+            speed: 0.5,
+            sway_amount: 1.0,
+            look_at: Vec3::new(0.0, 0.5, 0.0),
+        },
+        Msaa::Off,
+        DepthPrepass,
+    ));
+
     // circular base
     commands.spawn((
         Mesh3d(meshes.add(Circle::new(4.0))),
         MeshMaterial3d(materials.add(Color::WHITE)),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
+
     // cube
     let rm_material_handle = raymarch_material.add(ExtendedMaterial {
         base: StandardMaterial {
@@ -290,14 +294,17 @@ fn spawn_shit(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(4.0, 4.0, 4.0))),
         MeshMaterial3d(rm_material_handle.clone()),
-        // NotShadowCaster,
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
+
+    // cylinder
+    // It's inside of the raymarched cube to test if depth stuff works
     commands.spawn((
         Mesh3d(meshes.add(Cylinder::new(0.2, 5.0))),
         MeshMaterial3d(materials.add(Color::WHITE)),
         Transform::from_xyz(0.4, 0.2, 0.4),
     ));
+
     // light
     commands.spawn((
         PointLight {
