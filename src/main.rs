@@ -9,7 +9,7 @@ use bevy::{
     pbr::{ExtendedMaterial, MaterialExtension, NotShadowCaster},
     prelude::*,
     render::{
-        render_resource::{AsBindGroup, ShaderType},
+        render_resource::{AsBindGroup, MultisampleState, ShaderType},
         storage::ShaderStorageBuffer,
     },
 };
@@ -49,18 +49,6 @@ fn spin_camera(mut cams: Query<(&mut Transform, &SpinningCam)>, time: Res<Time>)
                     .looking_at(spinning_cam_vars.look_at, Vec3::Y);
             *transform = new_transform;
         });
-}
-
-// update the elapsed time that I pass to the shader
-fn update_raymarch_settings_time(
-    mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
-    rm_material_handle: Res<RaymarchMaterialHandle>,
-    time: Res<Time>,
-) {
-    let maybe_mat = rm_materials.get_mut(&rm_material_handle.0);
-    if let Some(mat) = maybe_mat {
-        mat.extension.raymarch_global_settings.time = time.elapsed_secs();
-    }
 }
 
 // info to pass to the shader
@@ -159,15 +147,28 @@ impl Default for RaymarchGlobalSettings {
     fn default() -> Self {
         return RaymarchGlobalSettings {
             intersection_method: 0,
-            intersection_smooth_amount: 0.0,
-            glow_range: 0.0,
-            glow_color: Vec4::ZERO,
-            far_clip: 10.0,
-            termination_distance: 0.001,
-            time: 0.0,
-        };
+    intersection_smooth_amount: 0.0,
+    glow_range: 0.0,
+    glow_color: Vec4::ZERO,
+    far_clip: 10.0,
+    termination_distance: 0.001,
+    time: 0.0,
+};
+}
+}
+
+// update the elapsed time that I pass to the shader
+fn update_raymarch_settings_time(
+    mut rm_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
+    rm_material_handle: Res<RaymarchMaterialHandle>,
+    time: Res<Time>,
+) {
+    let maybe_mat = rm_materials.get_mut(&rm_material_handle.0);
+    if let Some(mat) = maybe_mat {
+        mat.extension.raymarch_global_settings.time = time.elapsed_secs();
     }
 }
+
 
 // my RayMarch Material
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -190,14 +191,6 @@ impl MaterialExtension for RaymarchMaterial {
         _layout: &bevy::render::mesh::MeshVertexBufferLayoutRef,
         _key: bevy::pbr::MaterialExtensionKey<Self>,
     ) -> std::result::Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = Some(bevy::render::render_resource::Face::Back);
-        descriptor.depth_stencil = Some(bevy::render::render_resource::DepthStencilState {
-            format: bevy::render::render_resource::TextureFormat::Depth32Float,
-            depth_write_enabled: true,
-            depth_compare: bevy::render::render_resource::CompareFunction::Greater,
-            stencil: bevy::render::render_resource::StencilState::default(),
-            bias: bevy::render::render_resource::DepthBiasState::default(),
-        });
         Ok(())
     }
     fn prepass_fragment_shader() -> bevy::render::render_resource::ShaderRef {
@@ -250,6 +243,10 @@ impl RaymarchMaterial {
     }
 }
 
+/// this holds the current Material Handle (like a pointer) as a Resource
+#[derive(Resource)]
+struct RaymarchMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>);
+
 fn spawn_shit(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -262,6 +259,7 @@ fn spawn_shit(
         Camera3d {
             ..Default::default()
         },
+        Msaa::Off, // turn it off since it doesn't work on web
         SpinningCam {
             height: 2.0,
             distance: 4.0,
@@ -269,7 +267,6 @@ fn spawn_shit(
             sway_amount: 1.0,
             look_at: Vec3::new(0.0, 0.5, 0.0),
         },
-        Msaa::Off,
         DepthPrepass,
     ));
 
@@ -297,13 +294,14 @@ fn spawn_shit(
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
 
-    // cylinder
-    // It's inside of the raymarched cube to test if depth stuff works
-    commands.spawn((
-        Mesh3d(meshes.add(Cylinder::new(0.2, 5.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
-        Transform::from_xyz(0.4, 0.2, 0.4),
-    ));
+    // // cylinder
+    // // It's inside of the raymarched cube to test if depth stuff works
+    // // uncomment this to test!
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Cylinder::new(0.2, 5.0))),
+    //     MeshMaterial3d(materials.add(Color::WHITE)),
+    //     Transform::from_xyz(0.4, 0.2, 0.4),
+    // ));
 
     // light
     commands.spawn((
@@ -315,7 +313,3 @@ fn spawn_shit(
         Transform::from_xyz(4.0, 4.0, 4.0),
     ));
 }
-
-/// this holds the current Material Handle (like a pointer) as a Resource
-#[derive(Resource)]
-struct RaymarchMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>);

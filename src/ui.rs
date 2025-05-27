@@ -139,6 +139,7 @@ fn ui_settings_ui(
     rm_material_handle: Res<RaymarchMaterialHandle>,
 ) {
     egui::Window::new("Quick Settings").show(contexts.ctx_mut(), |ui| {
+        ui.label("depth reading cannot work on web!!");
         ui.horizontal(|ui| {
             ui.label("UI Mode");
             ui.vertical(|ui| {

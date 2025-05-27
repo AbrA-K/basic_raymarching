@@ -8,10 +8,10 @@
 
 @fragment
 fn fragment(
-	    @builtin(sample_index) sample_index: u32,
 	    mesh: VertexOutput,
+	    // @builtin(sample_index) sample_index: u32,
 	    ) -> @builtin(frag_depth) f32 {
-  let march = perform_march(mesh.position.xy, sample_index);
+  let march = perform_march(mesh.position.xy);
   if march.has_hit {
       let clip_curr_pos = view.clip_from_world * vec4<f32>(march.hit_pos, 1.0);
       let ndc_curr_pos = clip_curr_pos.xyz / clip_curr_pos.w;

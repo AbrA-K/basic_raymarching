@@ -16,14 +16,12 @@
 @group(2) @binding(101) var<uniform> object2: RaymarchObjectDescriptor;
 @group(2) @binding(102) var<uniform> raymarch_global_settings: RaymarchGlobalSettings;
 
-const NEAR_CLIP = 0.5; // TODO: this is unused
-
 @fragment
 fn fragment(
-    mesh: VertexOutput,
-    @builtin(sample_index) sample_index: u32,
+	    mesh: VertexOutput,
+	    // @builtin(sample_index) sample_index: u32,
 	    ) ->  FragmentOutput {
-  let march = perform_march(mesh.position.xy, sample_index);
+  let march = perform_march(mesh.position.xy);
   let sdf_out = sdf_world(march.hit_pos);
 
   if march.has_hit {
@@ -47,7 +45,11 @@ fn fragment(
 
       // TODO: write to depth texture
       // right now: if something is in front, I just discard the pixel!
-      let depth = bevy_pbr::prepass_utils::prepass_depth(mesh.position, sample_index);
+      // also: we cannot read from depth texture in webgl2
+#ifdef WEBGL2
+      return out;
+#else
+      let depth = bevy_pbr::prepass_utils::prepass_depth(mesh.position, 0);
       let clip_curr_pos = view.clip_from_world * vec4<f32>(march.hit_pos, 1.0);
       let ndc_curr_pos = clip_curr_pos.xyz / clip_curr_pos.w;
       let curr_pos_depth = ndc_curr_pos.z;
@@ -56,8 +58,8 @@ fn fragment(
 	  out.color.w = 0.0;
 	}
       return out;
+#endif //WEBGL2
     } else {
-    // no hit :c
     var out: FragmentOutput;
     let min_step_normalized = march.min_dist_from_object / raymarch_global_settings.glow_range;
     let glow_amount = (clamp(min_step_normalized, 0.0, 1.0) * -1.0 + 1.0)
@@ -76,7 +78,7 @@ struct MarchOutput {
 };
 fn perform_march(
 		 coord: vec2<f32>,
-		 sample_index: u32,
+		 // sample_index: u32,
 ) -> MarchOutput {
   // get the Ray direction
   let cam_pos = view.world_position;
@@ -101,9 +103,9 @@ fn perform_march(
 
       // no hit yet, continue marching..
       var step: vec3<f32>;
-      let smin_distance = my_min(sdf_out.distance_to_1object,
-				 sdf_out.distance_to_2object);
-      step = ray_dir * smin_distance;
+      let step_min_distance = my_min(sdf_out.distance_to_1object,
+				     sdf_out.distance_to_2object);
+      step = ray_dir * step_min_distance;
       let step_length = length(step);
       if step_length < min_step_length {
 	  min_step_length = step_length;
