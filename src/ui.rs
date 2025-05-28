@@ -140,6 +140,7 @@ fn ui_settings_ui(
 ) {
     egui::Window::new("Quick Settings").show(contexts.ctx_mut(), |ui| {
         ui.label("depth reading cannot work on web!!");
+        ui.label("that's why on web you will see these objects go through stuff");
         ui.horizontal(|ui| {
             ui.label("UI Mode");
             ui.vertical(|ui| {

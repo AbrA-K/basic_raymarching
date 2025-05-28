@@ -1,10 +1,12 @@
 [package]
-name = "raymarching_bachelor"
+name = "basic_raymarching"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = {version = "0.16.0", features = ["wayland", "dynamic_linking"]}
+# uncomment for faster compiles (if your setup supports this)
+#bevy = {version = "0.16.0", features = ["dynamic_linking"]}
+bevy = {version = "0.16.0"}
 bevy_egui = "0.34.1"
 
 # optimizations for dependencies, but not our code
