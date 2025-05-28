@@ -273,7 +273,7 @@ fn create_object_settings(ui: &mut egui::Ui, desc: &mut RaymarchObjectDescriptor
         ))
     });
     ui.add(egui::Label::new(
-        "hätte noch mehr Möglichkeiten, aber will nicht overcrouden",
+        "there are more knobs to turn, but these are enough for now",
     ));
 }
 
