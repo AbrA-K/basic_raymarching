@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Basic Raymarching</title>
+    <link rel="stylesheet" href="/frontend/style.css">
+  </head>
+  <body>
+    <div id="canvas-parent">
+      <script type="module">
+	import init from "./out/basic_raymarching.js";
+	init().then((_) => {
+	    let canvas = document.querySelector("canvas");
+	    canvas.id = "bevy-canvas";
+	    let canvas_parent = document.getElementById("canvas-parent");
+	    canvas_parent.appendChild(canvas);
+	});
+      </script>
+      <p id="game-description">
+This is a small raymarching sandbox for you to play around in.
+It has a couple of demos to show some basic features. If you want to explore more, you can change to the full ui, which will crowd the screen a lot (hence the default minimal ui). To give you some interesting knobs to turn, I recommend playing around with:<br>
+<br>
+ --- in Global Settings:<br>
+  - Termination distance<br>
+  - glow_color (notice: it's default 100% transparent)<br>
+  - glow_range<br>
+  - smooth intersection<br>
+- intersection method<br>
+<br>
+--- in Object Settings<br>
+  - rotation over time<br>
+  - translation over time<br>
+      </p>
+    </div>
+  </body>
+</html>

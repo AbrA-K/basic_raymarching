@@ -1,0 +1,4 @@
+title = "basic raymarching"
+short_description = "a short demonstration of how raymarching can render interesting shapes"
+description = "idk I'll write something here"
+route = "basic_raymarching"
