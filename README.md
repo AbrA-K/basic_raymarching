@@ -18,4 +18,5 @@ It has a couple of demos to show some basic features. If you want to explore mor
 you should just be able to `cargo run` this, but you need bevys dependencies:
 https://github.com/bevyengine/bevy/blob/latest/docs/linux_dependencies.md
 
-once I'm done you should also be able to run this from my website
+Or you can run it from my Website:
+https://abra-k.xyz/frontend/games/basic_raymarching/index.html
