@@ -147,14 +147,14 @@ impl Default for RaymarchGlobalSettings {
     fn default() -> Self {
         return RaymarchGlobalSettings {
             intersection_method: 0,
-    intersection_smooth_amount: 0.0,
-    glow_range: 0.0,
-    glow_color: Vec4::ZERO,
-    far_clip: 10.0,
-    termination_distance: 0.001,
-    time: 0.0,
-};
-}
+            intersection_smooth_amount: 0.0,
+            glow_range: 0.0,
+            glow_color: Vec4::ZERO,
+            far_clip: 10.0,
+            termination_distance: 0.001,
+            time: 0.0,
+        };
+    }
 }
 
 // update the elapsed time that I pass to the shader
@@ -168,7 +168,6 @@ fn update_raymarch_settings_time(
         mat.extension.raymarch_global_settings.time = time.elapsed_secs();
     }
 }
-
 
 // my RayMarch Material
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -222,7 +221,7 @@ impl RaymarchMaterial {
         out.material2.base_color = Vec4::new(0.0, 1.0, 0.0, 1.0);
         out.material2.shape_type_id = 2;
         out.material2.metallic = 0.6;
-        out.material2.rotation_amount = 0.5;
+        out.material2.rotation_amount = 0.3;
         out.raymarch_global_settings.intersection_smooth_amount = 0.5;
         return out;
     }
