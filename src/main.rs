@@ -72,13 +72,13 @@ struct RaymarchObjectDescriptor {
     /// sphere = 1
     /// square = 2
     /// cone = 3
+    /// mandelbulb = 4
     shape_type_id: u32,
     /// sphere -> radius
     /// square -> side lenght
     /// cone -> height
-    shape_var1: f32,
-    /// cone -> radius
-    shape_var2: f32,
+    shape_var: f32,
+    scale: f32,
 
     // material
     // TODO: a bunch of those are unused. do you need them?
@@ -107,8 +107,8 @@ impl Default for RaymarchObjectDescriptor {
             move_amout: 0.0,
             rotation_amount: 0.0,
             shape_type_id: 1,
-            shape_var1: 0.4,
-            shape_var2: 0.4,
+            shape_var: 0.4,
+            scale: 0.4,
             base_color: Vec4::new(1.0, 0.0, 0.0, 1.0),
             emissive: Vec4::ZERO,
             reflectance: Vec3::splat(0.5),
@@ -238,6 +238,20 @@ impl RaymarchMaterial {
         out.material2.metallic = 0.6;
         out.material2.rotation_amount = 0.5;
         out.raymarch_global_settings.intersection_method = 2;
+        return out;
+    }
+
+    fn get_mandelbulb_config() -> Self {
+        let mut out = RaymarchMaterial {
+            material1: RaymarchObjectDescriptor::default(),
+            material2: RaymarchObjectDescriptor::default(),
+            raymarch_global_settings: RaymarchGlobalSettings::default(),
+        };
+        out.material1.world_position = Vec3::new(0.0, 0.8, 0.0);
+        out.material1.rotation.x = 0.8;
+        out.material1.shape_type_id = 4;
+        out.material1.shape_var = 1.85;
+        out.material2.shape_var = 0.0;
         return out;
     }
 }

@@ -16,6 +16,9 @@
 @group(2) @binding(101) var<uniform> object2: RaymarchObjectDescriptor;
 @group(2) @binding(102) var<uniform> raymarch_global_settings: RaymarchGlobalSettings;
 
+const PI = 3.14159265359;
+const BAILOUT = 3.0;
+
 @fragment
 fn fragment(
 	    mesh: VertexOutput,
@@ -133,18 +136,20 @@ fn sdf_world(ray_position: vec3<f32>) -> SdfOutput {
 
 fn sdf_object(ray_position: vec3<f32>, obj: RaymarchObjectDescriptor) -> f32 {
   if obj.shape_type_id == 1 {
-      return sdf_circle(ray_position, obj.shape_1var);
+      return sdf_circle(ray_position, obj.shape_var);
     } else if obj.shape_type_id == 2 {
-      return sdBox(ray_position, vec3<f32>(obj.shape_1var));
+      return sdBox(ray_position, vec3<f32>(obj.shape_var));
     } else if obj.shape_type_id == 3 {
       // for some reason, the cone default position is really low
       // fix it here
       var rp_higher = ray_position;
       rp_higher.y -= 0.25;
       return sdConeBound(rp_higher,
-			 obj.shape_1var,
-			 vec2<f32>(sin(obj.shape_2var),
-				   cos(obj.shape_2var)));
+			 obj.shape_var,
+			 vec2<f32>(sin(obj.scale),
+				   cos(obj.scale)));
+    } else if obj.shape_type_id == 4 {
+      return sdfMandel(ray_position, obj.shape_var);
     }
   return 100000.0;
 }
@@ -168,6 +173,8 @@ fn translate_ray(r: vec3<f32>, obj: RaymarchObjectDescriptor) -> vec3<f32> {
   // rotation
   let added_rotation = obj.rotation_amount * raymarch_global_settings.time;
   out = (vec4<f32>(out, 1.0) * rotation_mat_x(obj.rotation.x + added_rotation)).xyz;
+
+  // scale
   return out;
 }
 
@@ -226,12 +233,48 @@ fn opSmoothIntersect(d1: f32, d2: f32, k: f32) -> f32 {
   return mix(d2, d1, h) + k * h * (1. - h);
 }
 
-
 fn smin_circular(a: f32, b: f32, k: f32) -> f32 {
   let km = k * (1.0/(1.0-sqrt(0.5)));
   let h = max(k - abs(a-b), 0.0) / k;
   return min(a,b) - k * 0.5 * (1.0 + h - sqrt(1.0 - h * (h - 2.0)));
 }
+
+fn opScale(p: vec3f, s: f32) -> vec3f {
+  return p / s;
+}
+
+// https://github.com/zordone/fractal-webgpu/blob/main/madelbulb/shaders.wgsl
+fn sdfMandel(point0: vec3<f32>, power: f32) -> f32 {
+  // the mandelbulb is at scene scene center. translate to origin.
+  let point = point0;
+  // params
+  //let blob = 1 - uniforms.blob;
+  //let spike = uniforms.spike * PI / 2;
+  let blob = 1 - 0.0;
+  let spike = 0.0 * PI / 2;
+ // iterate to find distance
+  var z = point;
+  var dr = 1.0;
+  var dist: f32;
+  for (var step = 0; step < 16; step++) {
+    dist = length(z);
+    if (dist > BAILOUT) { break; }
+    // to polar coordinates
+    let theta = acos(z.z / dist) * power * blob;
+    let phi = atan2(z.y, z.x) * power;
+    // scale and rotate
+    let distPowMinusOne = pow(dist, power - 1.0);
+    let zr = distPowMinusOne * dist;
+    dr = distPowMinusOne * power * dr + 1.0;
+    // back to cartesian coordinates
+    let sinTheta = sin(theta);
+    z = zr * vec3<f32>(sinTheta * cos(phi), sin(phi + spike) * sinTheta, cos(theta));
+    z += point;
+  }
+  return 0.5 * log(dist) * dist / dr;
+}
+
+
 
 // stolen from https://github.com/rust-adventure/bevy-examples/blob/fabbb45b5c6adbfc8d317c95fcd9097b08666c7c/examples/raymarch-sphere/assets/shaders/sdf.wgsl#L160
 fn get_normal_of_surface(position_of_hit: vec3<f32>) -> vec3<f32> {
@@ -277,8 +320,8 @@ struct RaymarchObjectDescriptor {
  move_amount: f32,
  rotation_amount: f32,
  shape_type_id: u32,
- shape_1var: f32,
- shape_2var: f32,
+ shape_var: f32,
+ scale: f32,
  base_color: vec4<f32>,
  emissive: vec4<f32>,
  reflectance: vec3<f32>,

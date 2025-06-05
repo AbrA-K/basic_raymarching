@@ -167,6 +167,10 @@ fn ui_settings_ui(
                         if intersection_prototype_button.clicked() {
                             mat.extension = RaymarchMaterial::get_intersection_config()
                         }
+                        let mandelbulb_prototype_button = ui.button("Mandelbulb");
+                        if mandelbulb_prototype_button.clicked() {
+                            mat.extension = RaymarchMaterial::get_mandelbulb_config()
+                        }
                     });
                 });
             }
@@ -200,6 +204,7 @@ fn create_object_settings(ui: &mut egui::Ui, desc: &mut RaymarchObjectDescriptor
         ui.radio_value(&mut desc.shape_type_id, Shape::Circle as u32, "Sphere");
         ui.radio_value(&mut desc.shape_type_id, Shape::Cube as u32, "Cube");
         ui.radio_value(&mut desc.shape_type_id, Shape::Cone as u32, "Cone");
+        ui.radio_value(&mut desc.shape_type_id, Shape::Mandelbulb as u32, "Mandelbulb");
     });
     ui.heading("Transform");
     ui.horizontal(|ui| {
@@ -219,6 +224,13 @@ fn create_object_settings(ui: &mut egui::Ui, desc: &mut RaymarchObjectDescriptor
         ui.add(egui::Slider::new(
             &mut desc.rotation.x,
             -f32::consts::PI..=f32::consts::PI,
+        ))
+    });
+    ui.horizontal(|ui| {
+        ui.label("shape variable");
+        ui.add(egui::Slider::new(
+            &mut desc.shape_var,
+            0.0..=2.0,
         ))
     });
     ui.horizontal(|ui| {
@@ -298,6 +310,7 @@ enum Shape {
     Circle = 1,
     Cube = 2,
     Cone = 3,
+    Mandelbulb = 4,
 }
 
 #[derive(PartialEq)]
