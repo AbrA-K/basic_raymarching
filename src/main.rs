@@ -1,17 +1,11 @@
 mod ui;
-use bevy_egui::egui::Color32;
 use ui::MyRaymarchUi;
 
 use bevy::{
     core_pipeline::prepass::DepthPrepass,
-    log::tracing::instrument::WithSubscriber,
-    math::VectorSpace,
-    pbr::{ExtendedMaterial, MaterialExtension, NotShadowCaster},
+    pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
-    render::{
-        render_resource::{AsBindGroup, MultisampleState, ShaderType},
-        storage::ShaderStorageBuffer,
-    },
+    render::render_resource::{AsBindGroup, ShaderType},
 };
 
 fn main() {
@@ -184,14 +178,6 @@ impl MaterialExtension for RaymarchMaterial {
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
         "shaders/basic_raymarch.wgsl".into()
     }
-    fn specialize(
-        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
-        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
-        _layout: &bevy::render::mesh::MeshVertexBufferLayoutRef,
-        _key: bevy::pbr::MaterialExtensionKey<Self>,
-    ) -> std::result::Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
-        Ok(())
-    }
     fn prepass_fragment_shader() -> bevy::render::render_resource::ShaderRef {
         "shaders/basic_raymarch_prepass.wgsl".into()
     }
@@ -264,7 +250,6 @@ fn spawn_shit(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
     mut raymarch_material: ResMut<Assets<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>>,
 ) {
     // camera
@@ -308,8 +293,9 @@ fn spawn_shit(
     ));
 
     // // cylinder
-    // // It's inside of the raymarched cube to test if depth stuff works
+    // // It's spawned inside of the raymarched cube to test if depth stuff works
     // // uncomment this to test!
+    // // on web, you will see that depth stuff doesn't work, so I'll leave this commented
     // commands.spawn((
     //     Mesh3d(meshes.add(Cylinder::new(0.2, 5.0))),
     //     MeshMaterial3d(materials.add(Color::WHITE)),
