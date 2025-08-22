@@ -15,7 +15,7 @@ fn main() {
             MyRaymarchUi,
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>::default(),
         ))
-        .add_systems(Startup, spawn_shit)
+        .add_systems(Startup, setup)
         .add_systems(Update, (spin_camera, update_raymarch_settings_time))
         .run();
 }
@@ -246,7 +246,7 @@ impl RaymarchMaterial {
 #[derive(Resource)]
 struct RaymarchMaterialHandle(Handle<ExtendedMaterial<StandardMaterial, RaymarchMaterial>>);
 
-fn spawn_shit(
+fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -278,8 +278,6 @@ fn spawn_shit(
     // cube
     let rm_material_handle = raymarch_material.add(ExtendedMaterial {
         base: StandardMaterial {
-            // base_color_texture: Some(asset_server.load("icon.png")),
-            // base_color: bevy::color::palettes::css::BLUE.into(),
             alpha_mode: AlphaMode::Blend,
             ..Default::default()
         },

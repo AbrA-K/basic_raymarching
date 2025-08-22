@@ -1,15 +1,15 @@
 #import bevy_pbr::{
-      mesh_view_bindings::view,
-      forward_io::VertexOutput,
-      forward_io::FragmentOutput,
-      utils::coords_to_viewport_uv,
-      pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
-      pbr_types::pbr_input_new,
-      pbr_types::StandardMaterial,
-      pbr_types::standard_material_new,
-      pbr_functions::alpha_discard,
-      pbr_fragment::pbr_input_from_standard_material,
-      mesh_view_bindings::globals,
+mesh_view_bindings::view,
+  forward_io::VertexOutput,
+  forward_io::FragmentOutput,
+  utils::coords_to_viewport_uv,
+  pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
+  pbr_types::pbr_input_new,
+  pbr_types::StandardMaterial,
+  pbr_types::standard_material_new,
+  pbr_functions::alpha_discard,
+  pbr_fragment::pbr_input_from_standard_material,
+  mesh_view_bindings::globals,
 }
 
 @group(2) @binding(100) var<uniform> object1: RaymarchObjectDescriptor;
@@ -39,10 +39,13 @@ fn fragment(
 
       material = obj_descriptor_to_material(desc);
       var pbr_input = pbr_input_new();
+      pbr_input.frag_coord = mesh.position;
       pbr_input.material = material;
       pbr_input.world_normal = normal;
       pbr_input.N = normal; // this is also the normal??
-      pbr_input.V = normal; // this is also the normal??
+      pbr_input.V = normalize(view.world_position - march.hit_pos);
+      pbr_input.flags = pbr_input.flags | 1u << 29u; // set the MESH_FLAGS_SHADOW_RECEIVER_BIT
+      // pbr_input.world_position = vec4<f32>(march.hit_pos, 0.0);
       pbr_input.world_position = vec4<f32>(march.hit_pos, 1.0);
       out.color = apply_pbr_lighting(pbr_input);
 
