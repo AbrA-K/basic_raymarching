@@ -19,4 +19,4 @@ you should just be able to `cargo run` this, but you need bevys dependencies:
 https://github.com/bevyengine/bevy/blob/latest/docs/linux_dependencies.md
 
 Or you can run it from my Website:
-https://abra-k.xyz/frontend/games/basic_raymarching/index.html
+https://abra-k.xyz/static/games/basic_raymarching/index.html
