@@ -1,7 +1,7 @@
 [package]
 name = "basic_raymarching"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 # uncomment for faster compiles (if your setup supports this)
