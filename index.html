@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <title>Basic Raymarching</title>
-    <link rel="stylesheet" href="/frontend/style.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
   </head>
   <body>
     <div id="canvas-parent">
@@ -11,7 +12,7 @@
 	<h1>Description</h1>
 	<p>
 	This is a small raymarching sandbox for you to play around in.
-	It has a couple of demos to show some basic features. If you want to explore more, you can change to the full ui, which will crowd the screen a lot (hence the default minimal ui). To give you some interesting knobs to turn, I recommend playing around with:<br>
+	It has a couple of demos to show some basic features. If you want to explore more, you can change to the full UI, which will crowd the screen a lot (hence the default minimal UI). To give you some interesting knobs to turn, I recommend playing around with:<br>
 	<br>
 	<span class="bold">in Global Settings:</span><br>
 	- Termination distance<br>
@@ -30,7 +31,7 @@
 	<p>
 	  <span class="highlight_warning">WARNING:</span><br>
 	  The game binary can be quite large and running it might take a bit of processing power. <br>
-	  I recommend to load the game on a non-metered connection while on a laptop/desktop pc.
+	  I recommend loading the game on a non-metered connection while on a laptop/desktop pc.
 	</p>
 	<button id="load-game-button">load game!</button>
       </div>
@@ -40,16 +41,16 @@
       let replace_by_game_div = document.getElementById("replace_by_game");
       import init from "./out/basic_raymarching.js";
       export function load_game() {
-	  load_game_button.disabled = true;
-	  load_game_button.innerHTML = "loading...";
-	  init().then((_) => {
-	      let canvas = document.querySelector("canvas");
-	      canvas.id = "bevy-canvas";
-	      canvas.style ="";
-	      let canvas_parent = document.getElementById("canvas-parent");
-	      canvas_parent.appendChild(canvas);
-	      replace_by_game_div.remove();
-	  });
+    	  load_game_button.disabled = true;
+    	  load_game_button.innerHTML = "loading...";
+    	  init().then((_) => {
+    	      let canvas = document.querySelector("canvas");
+    	      canvas.id = "bevy-canvas";
+    	      canvas.style ="";
+    	      let canvas_parent = document.getElementById("canvas-parent");
+    	      canvas_parent.appendChild(canvas);
+    	      replace_by_game_div.remove();
+    	  });
       }
       load_game_button.onclick = load_game;
     </script>
